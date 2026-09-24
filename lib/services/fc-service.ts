@@ -1,12 +1,31 @@
+import { DEFAULT_SETTINGS } from "@/lib/data/store";
 import {
-  DEFAULT_SETTINGS,
-  SEED_MATCHES,
-  SEED_PLAYERS,
-  SEED_SEASONS,
-  SEED_SESSIONS,
-} from "@/lib/data/store";
+  createMatchAction,
+  createSessionAction,
+  deleteMatchAction,
+  saveSettingsAction,
+  updateMatchAction,
+  type ActionResult,
+} from "@/lib/services/fc-actions";
+import { getBrowserClient } from "@/lib/supabase/client";
 import {
-  DEFAULT_MATCH_MODE,
+  MATCH_COLUMNS,
+  PLAYER_COLUMNS,
+  SEASON_COLUMNS,
+  SESSION_COLUMNS,
+  SETTINGS_COLUMNS,
+  toMatch,
+  toPlayer,
+  toSeason,
+  toSession,
+  toSettings,
+  type MatchRow,
+  type PlayerRow,
+  type SeasonRow,
+  type SessionRow,
+  type SettingsRow,
+} from "@/lib/supabase/rows";
+import {
   getHeadToHead as computeHeadToHead,
   isMatchMode,
   getRanking as computeRanking,
@@ -22,13 +41,17 @@ import {
 } from "@/types";
 
 /**
- * Límite de persistencia de la app. Hoy usa `localStorage`; la UI solo debe
- * llamar a las funciones exportadas aquí, nunca leer `localStorage`
- * directamente, para poder sustituir esta capa por Supabase sin tocar rutas
- * ni componentes.
+ * Límite de persistencia de la app. La UI solo llama a las funciones
+ * exportadas aquí, nunca a Supabase directamente.
+ *
+ * Lecturas: `loadState()` trae todo de Supabase (clave publicable, RLS de
+ * solo lectura) a una instantánea en memoria, y los getters la leen de forma
+ * síncrona. `useFcStore` se encarga de cargarla y de re-renderizar.
+ *
+ * Escrituras: son async, pasan por Server Actions (`fc-actions.ts`) y al
+ * terminar recargan la instantánea.
  */
 
-const STORAGE_KEY = "fc-goat-state";
 export const FC_STORE_EVENT = "fc-goat:update";
 
 interface PersistedState {
@@ -39,52 +62,83 @@ interface PersistedState {
   settings: AppSettings;
 }
 
-function seedState(): PersistedState {
+const EMPTY_STATE: PersistedState = {
+  players: [],
+  matches: [],
+  sessions: [],
+  seasons: [],
+  settings: DEFAULT_SETTINGS,
+};
+
+let state: PersistedState | null = null;
+let inflight: Promise<void> | null = null;
+
+function readState(): PersistedState {
+  return state ?? EMPTY_STATE;
+}
+
+/** true cuando ya hay una instantánea cargada desde Supabase. */
+export function isLoaded(): boolean {
+  return state !== null;
+}
+
+async function fetchState(): Promise<PersistedState> {
+  const supabase = getBrowserClient();
+  const [players, matches, sessions, seasons, settings] = await Promise.all([
+    supabase.from("players").select(PLAYER_COLUMNS).order("created_at").returns<PlayerRow[]>(),
+    supabase.from("matches").select(MATCH_COLUMNS).returns<MatchRow[]>(),
+    supabase.from("sessions").select(SESSION_COLUMNS).returns<SessionRow[]>(),
+    supabase.from("seasons").select(SEASON_COLUMNS).order("year").returns<SeasonRow[]>(),
+    supabase.from("app_settings").select(SETTINGS_COLUMNS).maybeSingle<SettingsRow>(),
+  ]);
+
+  const failed = [players, matches, sessions, seasons, settings].find((r) => r.error);
+  if (failed?.error) throw new Error(`No se pudieron cargar los datos: ${failed.error.message}`);
+
+  const matchList = (matches.data ?? []).map(toMatch);
+  const matchIdsBySession = new Map<string, string[]>();
+  for (const match of [...matchList].sort(byCreatedAtAsc)) {
+    if (!match.sessionId) continue;
+    const ids = matchIdsBySession.get(match.sessionId) ?? [];
+    ids.push(match.id);
+    matchIdsBySession.set(match.sessionId, ids);
+  }
+
   return {
-    players: SEED_PLAYERS,
-    matches: SEED_MATCHES,
-    sessions: SEED_SESSIONS,
-    seasons: SEED_SEASONS,
-    settings: DEFAULT_SETTINGS,
+    players: (players.data ?? []).map(toPlayer),
+    matches: matchList,
+    sessions: (sessions.data ?? []).map((row) => toSession(row, matchIdsBySession.get(row.id) ?? [])),
+    seasons: (seasons.data ?? []).map(toSeason),
+    settings: settings.data ? toSettings(settings.data) : DEFAULT_SETTINGS,
   };
 }
 
-function readState(): PersistedState {
-  if (typeof window === "undefined") return seedState();
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return seedState();
-    const parsed = JSON.parse(raw) as Partial<PersistedState>;
-    return {
-      players: parsed.players ?? SEED_PLAYERS,
-      matches: (parsed.matches ?? SEED_MATCHES).map(normalizeMatch),
-      sessions: parsed.sessions ?? SEED_SESSIONS,
-      seasons: parsed.seasons ?? SEED_SEASONS,
-      settings: parsed.settings ?? DEFAULT_SETTINGS,
-    };
-  } catch {
-    return seedState();
-  }
+function byCreatedAtAsc(a: Match, b: Match): number {
+  return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
 }
 
-/** Partidos guardados antes de existir `mode` se consideran de plantilla normal. */
-function normalizeMatch(match: Match): Match {
-  return isMatchMode(match.mode) ? match : { ...match, mode: DEFAULT_MATCH_MODE };
+/**
+ * Recarga la instantánea desde Supabase y avisa a los suscriptores.
+ * Llamadas concurrentes comparten la misma petición.
+ */
+export function loadState(): Promise<void> {
+  if (inflight) return inflight;
+  inflight = fetchState()
+    .then((next) => {
+      state = next;
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(FC_STORE_EVENT));
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
 
-function writeState(state: PersistedState): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  window.dispatchEvent(new Event(FC_STORE_EVENT));
-}
-
-function generateId(prefix: string): string {
-  const uuid =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${prefix}-${uuid}`;
+async function run<T>(action: Promise<ActionResult<T>>): Promise<T> {
+  const result = await action;
+  if (!result.ok) throw new Error(result.error);
+  await loadState();
+  return result.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,9 +162,7 @@ export function getPlayer(id: string): Player | undefined {
 // ---------------------------------------------------------------------------
 
 export function getMatches(): Match[] {
-  return [...readState().matches].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  return [...readState().matches].sort((a, b) => byCreatedAtAsc(b, a));
 }
 
 export function getMatch(id: string): Match | undefined {
@@ -138,7 +190,7 @@ export interface CreateMatchInput {
   createdBy: string;
 }
 
-export function createMatch(input: CreateMatchInput): Match {
+export async function createMatch(input: CreateMatchInput): Promise<Match> {
   if (input.player1Id === input.player2Id) {
     throw new Error("Un partido necesita dos jugadores distintos.");
   }
@@ -148,61 +200,26 @@ export function createMatch(input: CreateMatchInput): Match {
   if (!isMatchMode(input.mode)) {
     throw new Error("Selecciona un tipo de partido válido.");
   }
-
-  const state = readState();
-  const match: Match = {
-    id: generateId("m"),
-    player1Id: input.player1Id,
-    player2Id: input.player2Id,
-    score1: input.score1,
-    score2: input.score2,
-    mode: input.mode,
-    season: input.season,
-    sessionId: input.sessionId,
-    notes: input.notes,
-    evidenceUrl: input.evidenceUrl,
-    createdBy: input.createdBy,
-    createdAt: new Date().toISOString(),
-  };
-
-  state.matches = [...state.matches, match];
-  if (match.sessionId) {
-    state.sessions = state.sessions.map((session) =>
-      session.id === match.sessionId
-        ? { ...session, matchIds: [...session.matchIds, match.id] }
-        : session
-    );
-  }
-  writeState(state);
-  return match;
+  return run(createMatchAction(input));
 }
 
-export function updateMatch(id: string, patch: Partial<CreateMatchInput>): Match {
-  const state = readState();
-  const existing = state.matches.find((m) => m.id === id);
-  if (!existing) throw new Error(`No existe el partido ${id}.`);
-
-  const updated: Match = { ...existing, ...patch };
-  if (updated.player1Id === updated.player2Id) {
-    throw new Error("Un partido necesita dos jugadores distintos.");
+export async function updateMatch(id: string, patch: Partial<CreateMatchInput>): Promise<Match> {
+  const existing = getMatch(id);
+  if (existing) {
+    const player1Id = patch.player1Id ?? existing.player1Id;
+    const player2Id = patch.player2Id ?? existing.player2Id;
+    if (player1Id === player2Id) {
+      throw new Error("Un partido necesita dos jugadores distintos.");
+    }
   }
-  if (!isMatchMode(updated.mode)) {
+  if (patch.mode !== undefined && !isMatchMode(patch.mode)) {
     throw new Error("Selecciona un tipo de partido válido.");
   }
-
-  state.matches = state.matches.map((m) => (m.id === id ? updated : m));
-  writeState(state);
-  return updated;
+  return run(updateMatchAction(id, patch));
 }
 
-export function deleteMatch(id: string): void {
-  const state = readState();
-  state.matches = state.matches.filter((m) => m.id !== id);
-  state.sessions = state.sessions.map((session) => ({
-    ...session,
-    matchIds: session.matchIds.filter((matchId) => matchId !== id),
-  }));
-  writeState(state);
+export async function deleteMatch(id: string): Promise<void> {
+  await run(deleteMatchAction(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -226,20 +243,8 @@ export interface CreateSessionInput {
   createdBy: string;
 }
 
-export function createSession(input: CreateSessionInput): Session {
-  const state = readState();
-  const session: Session = {
-    id: generateId("session"),
-    name: input.name,
-    date: input.date,
-    season: input.season,
-    matchIds: [],
-    createdBy: input.createdBy,
-    createdAt: new Date().toISOString(),
-  };
-  state.sessions = [...state.sessions, session];
-  writeState(state);
-  return session;
+export async function createSession(input: CreateSessionInput): Promise<Session> {
+  return run(createSessionAction(input));
 }
 
 // ---------------------------------------------------------------------------
@@ -266,22 +271,19 @@ export function getRules(): GoatRules {
   return getSettings().rules;
 }
 
-export function updateSettings(patch: Partial<AppSettings>): AppSettings {
-  const state = readState();
-  state.settings = {
-    ...state.settings,
-    ...patch,
-    rules: { ...state.settings.rules, ...patch.rules },
-  };
-  writeState(state);
-  return state.settings;
+export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const current = getSettings();
+  return run(
+    saveSettingsAction({
+      ...current,
+      ...patch,
+      rules: { ...current.rules, ...patch.rules },
+    })
+  );
 }
 
-export function resetSettings(): AppSettings {
-  const state = readState();
-  state.settings = DEFAULT_SETTINGS;
-  writeState(state);
-  return state.settings;
+export async function resetSettings(): Promise<AppSettings> {
+  return run(saveSettingsAction(DEFAULT_SETTINGS));
 }
 
 // ---------------------------------------------------------------------------
@@ -290,16 +292,12 @@ export function resetSettings(): AppSettings {
 
 /** Ranking GOAT general, o solo con los partidos de un tipo si se pasa `mode`. */
 export function getRanking(mode?: MatchMode): RankingEntry[] {
-  const state = readState();
-  const matches = mode ? state.matches.filter((m) => m.mode === mode) : state.matches;
-  return computeRanking(state.players, matches, state.settings.rules);
+  const { players, matches: all, settings } = readState();
+  const matches = mode ? all.filter((m) => m.mode === mode) : all;
+  return computeRanking(players, matches, settings.rules);
 }
 
 export function getHeadToHead(playerAId: string, playerBId: string): HeadToHead {
-  const state = readState();
-  return computeHeadToHead(playerAId, playerBId, state.matches, state.settings.rules);
-}
-
-export function resetAllData(): void {
-  writeState(seedState());
+  const { matches, settings } = readState();
+  return computeHeadToHead(playerAId, playerBId, matches, settings.rules);
 }

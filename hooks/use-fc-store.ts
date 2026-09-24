@@ -1,43 +1,71 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { FC_STORE_EVENT } from "@/lib/services/fc-service";
+import { FC_STORE_EVENT, isLoaded, loadState } from "@/lib/services/fc-service";
 
 /**
- * Los datos de dominio viven en `localStorage`, que es un store externo a
- * React. `version` es la instantánea mínima que expone ese store: un número
- * que sube cada vez que el servicio escribe (misma pestaña vía evento
- * custom, otras pestañas vía `storage`). `useSyncExternalStore` usa
- * `getServerSnapshot` durante la hidratación para no producir un mismatch
- * con el render del servidor, y cambia a `getSnapshot` justo después.
+ * Los datos de dominio viven en una instantánea en memoria que el servicio
+ * carga desde Supabase. `version` sube cada vez que esa instantánea cambia
+ * (carga inicial, escritura propia o recarga al volver a la pestaña), y es
+ * lo que observa `useSyncExternalStore`. Mientras no haya datos la
+ * instantánea es -1, igual que en el servidor, así que la hidratación no
+ * produce mismatch y los componentes muestran su estado de carga.
  */
 let version = 0;
+let loadError: string | null = null;
+
+function refresh() {
+  loadState().then(
+    () => {
+      loadError = null;
+    },
+    (error: unknown) => {
+      loadError = error instanceof Error ? error.message : "No se pudieron cargar los datos.";
+      console.error("[fc-store]", error);
+      window.dispatchEvent(new Event(FC_STORE_EVENT));
+    }
+  );
+}
 
 function subscribe(callback: () => void) {
   const handleChange = () => {
     version += 1;
     callback();
   };
+  // Otros jugadores pueden haber registrado partidos mientras la pestaña
+  // estaba en segundo plano.
+  const handleVisible = () => {
+    if (document.visibilityState === "visible") refresh();
+  };
+
   window.addEventListener(FC_STORE_EVENT, handleChange);
-  window.addEventListener("storage", handleChange);
+  document.addEventListener("visibilitychange", handleVisible);
+  if (!isLoaded()) refresh();
+
   return () => {
     window.removeEventListener(FC_STORE_EVENT, handleChange);
-    window.removeEventListener("storage", handleChange);
+    document.removeEventListener("visibilitychange", handleVisible);
   };
 }
 
+/** -1: cargando, -2: falló la carga, >= 0: datos listos. */
 function getSnapshot() {
-  return version;
+  if (isLoaded()) return version;
+  return loadError ? -2 : -1;
 }
 
 function getServerSnapshot() {
   return -1;
 }
 
-export function useFcStore<T>(select: () => T): { data: T | undefined; ready: boolean } {
+export function useFcStore<T>(select: () => T): {
+  data: T | undefined;
+  ready: boolean;
+  error: string | null;
+} {
   const storeVersion = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const ready = storeVersion !== -1;
+  const ready = storeVersion >= 0;
   const data = ready ? select() : undefined;
 
-  return { data, ready };
+  return { data, ready, error: storeVersion === -2 ? loadError : null };
 }

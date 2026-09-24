@@ -2,9 +2,9 @@ import type { AppSettings, Match, Player, Season, Session } from "@/types";
 import { DEFAULT_RULES } from "@/types";
 
 /**
- * Dataset seed único. Toda la app (dashboard, rutas workspace y servicio de
- * persistencia) consume esta misma fuente — no debe existir un segundo
- * dataset mock en paralelo.
+ * Dataset seed. Los datos reales viven en Supabase y se cargan con
+ * `supabase/seed.sql`, que debe mantenerse igual a este archivo. La app solo
+ * usa `DEFAULT_SETTINGS` en tiempo de ejecución.
  */
 
 export const SEED_PLAYERS: Player[] = [

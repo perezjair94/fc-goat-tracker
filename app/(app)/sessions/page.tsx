@@ -26,20 +26,32 @@ export default function SessionsPage() {
   const { data: sessions, ready } = useFcStore(getSessions);
   const { currentPlayerId } = useCurrentPlayer();
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
-    const season = getActiveSeason()?.year ?? new Date().getFullYear();
-    createSession({ name: name.trim(), date, season, createdBy: currentPlayerId ?? "" });
-    toast.success("Sesión creada");
-    setName("");
-    setDate(today);
-    setOpen(false);
+    if (!name.trim() || creating) return;
+    if (!currentPlayerId) {
+      toast.error("Elige quién eres antes de crear una sesión.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const season = getActiveSeason()?.year ?? new Date().getFullYear();
+      await createSession({ name: name.trim(), date, season, createdBy: currentPlayerId });
+      toast.success("Sesión creada");
+      setName("");
+      setDate(today);
+      setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear la sesión.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
@@ -109,8 +121,8 @@ export default function SessionsPage() {
               <Input id="session-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <DialogFooter>
-              <Button type="submit" className="bg-goat-lime text-black hover:bg-goat-lime-2">
-                Crear sesión
+              <Button type="submit" disabled={creating} className="bg-goat-lime text-black hover:bg-goat-lime-2">
+                {creating ? "Creando..." : "Crear sesión"}
               </Button>
             </DialogFooter>
           </form>

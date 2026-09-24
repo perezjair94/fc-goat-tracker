@@ -35,19 +35,27 @@ function SettingsForm({ initialSettings, seasons }: { initialSettings: AppSettin
   const [activeSeasonId, setActiveSeasonId] = useState(initialSettings.activeSeasonId);
   const [rules, setRules] = useState<GoatRules>(initialSettings.rules);
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    updateSettings({ appName, groupName, activeSeasonId, rules });
-    toast.success("Configuración guardada");
+    try {
+      await updateSettings({ appName, groupName, activeSeasonId, rules });
+      toast.success("Configuración guardada");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
+    }
   }
 
-  function handleReset() {
-    const restored = resetSettings();
-    setAppName(restored.appName);
-    setGroupName(restored.groupName);
-    setActiveSeasonId(restored.activeSeasonId);
-    setRules(restored.rules);
-    toast.success("Configuración restaurada");
+  async function handleReset() {
+    try {
+      const restored = await resetSettings();
+      setAppName(restored.appName);
+      setGroupName(restored.groupName);
+      setActiveSeasonId(restored.activeSeasonId);
+      setRules(restored.rules);
+      toast.success("Configuración restaurada");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo restaurar la configuración.");
+    }
   }
 
   function updateRule(key: keyof GoatRules, value: string) {

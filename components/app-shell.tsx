@@ -26,7 +26,7 @@ function Brand({ groupName }: { groupName?: string }) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { data: settings } = useFcStore(getSettings);
+  const { data: settings, error: loadError } = useFcStore(getSettings);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -94,7 +94,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Sheet>
 
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">{children}</div>
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+            {loadError ? (
+              <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {loadError} Revisa tu conexión y vuelve a la pestaña para reintentar.
+              </p>
+            ) : null}
+            {children}
+          </div>
         </main>
       </div>
     </div>

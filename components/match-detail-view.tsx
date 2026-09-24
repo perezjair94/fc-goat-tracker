@@ -53,11 +53,15 @@ export function MatchDetailView({ id }: { id: string }) {
   const [result1, result2] = getMatchResults(match, rules);
   const ko = isKnockout(match, rules);
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!match) return;
-    deleteMatch(match.id);
-    toast.success("Partido eliminado");
-    router.push("/history");
+    try {
+      await deleteMatch(match.id);
+      toast.success("Partido eliminado");
+      router.push("/history");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo eliminar el partido.");
+    }
   }
 
   return (

@@ -87,7 +87,7 @@ export function MatchForm({ defaultSessionId, redirectTo = "/history" }: MatchFo
     setSubmitting(true);
     try {
       const season = getActiveSeason()?.year ?? new Date().getFullYear();
-      createMatch({
+      await createMatch({
         player1Id,
         player2Id,
         score1: s1,
