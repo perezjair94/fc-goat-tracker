@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getCurrentPlayerId, signIn, signUp } from "@/lib/services/fc-service";
+import { PlayerPicker, isChoiceComplete } from "@/components/player-picker";
+import { getAccount, getCurrentPlayerId, signIn, signUp, type PlayerChoice } from "@/lib/services/fc-service";
 import { cn } from "@/lib/utils";
 
 type Mode = "signIn" | "signUp";
@@ -16,23 +17,36 @@ export function AuthForm() {
   const [mode, setMode] = useState<Mode>("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [choice, setChoice] = useState<PlayerChoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (mode === "signUp" && !isChoiceComplete(choice)) {
+      setError("Elige tu jugador o escribe tu nombre si eres nuevo.");
+      return;
+    }
     setSubmitting(true);
     try {
       if (mode === "signIn") {
         await signIn(email.trim(), password);
+        toast.success("Sesión iniciada");
       } else {
-        await signUp(email.trim(), password);
+        const player = await signUp(email.trim(), password, choice!);
+        toast.success(`Cuenta creada. Bienvenido, ${player.name}`);
       }
-      toast.success(mode === "signIn" ? "Sesión iniciada" : "Cuenta creada");
       router.push(getCurrentPlayerId() ? "/" : "/claim");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo continuar.");
+      const message = err instanceof Error ? err.message : "No se pudo continuar.";
+      // La cuenta ya se creó y hay sesión: solo falló vincular el jugador.
+      if (mode === "signUp" && getAccount()) {
+        toast.error(`${message} Elige tu jugador de nuevo.`);
+        router.push("/claim");
+        return;
+      }
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -88,6 +102,13 @@ export function AuthForm() {
           <p className="text-xs text-muted-foreground">Mínimo 8 caracteres.</p>
         ) : null}
       </div>
+
+      {mode === "signUp" ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">¿Quién eres?</span>
+          <PlayerPicker value={choice} onChange={setChoice} disabled={submitting} />
+        </div>
+      ) : null}
 
       {error ? (
         <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

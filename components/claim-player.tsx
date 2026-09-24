@@ -3,19 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { LogIn, UserCheck, Users } from "lucide-react";
+import { LogIn, UserCheck } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { PlayerAvatar } from "@/components/player-avatar";
+import { PlayerPicker, isChoiceComplete } from "@/components/player-picker";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentPlayer } from "@/hooks/use-current-player";
-import { useFcStore } from "@/hooks/use-fc-store";
-import { claimPlayer, getUnclaimedPlayers } from "@/lib/services/fc-service";
+import { linkPlayer, type PlayerChoice } from "@/lib/services/fc-service";
 
 export function ClaimPlayer() {
   const router = useRouter();
   const { ready, account, currentPlayerId } = useCurrentPlayer();
-  const { data: players } = useFcStore(getUnclaimedPlayers);
-  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [choice, setChoice] = useState<PlayerChoice | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   if (!ready) return <Skeleton className="h-48 w-full rounded-2xl" />;
 
@@ -43,48 +44,38 @@ export function ClaimPlayer() {
     );
   }
 
-  if (!players || players.length === 0) {
-    return (
-      <EmptyState
-        icon={Users}
-        title="No quedan jugadores libres"
-        description="Todos los jugadores ya tienen dueño. Pide que te agreguen al grupo."
-      />
-    );
-  }
-
-  async function handleClaim(playerId: string) {
-    setClaimingId(playerId);
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isChoiceComplete(choice)) {
+      toast.error("Elige tu jugador o escribe tu nombre si eres nuevo.");
+      return;
+    }
+    setSubmitting(true);
     try {
-      const player = await claimPlayer(playerId);
+      const player = await linkPlayer(choice);
       toast.success(`Ahora eres ${player.name}`);
       router.push("/");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo elegir el jugador.");
+      toast.error(err instanceof Error ? err.message : "No se pudo vincular el jugador.");
     } finally {
-      setClaimingId(null);
+      setSubmitting(false);
     }
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {players.map((player) => (
-        <button
-          key={player.id}
-          type="button"
-          disabled={claimingId !== null}
-          onClick={() => handleClaim(player.id)}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:border-goat-lime/40 disabled:opacity-60"
-        >
-          <PlayerAvatar player={player} />
-          <span className="flex flex-col">
-            <span className="font-semibold">{player.name}</span>
-            <span className="text-xs text-muted-foreground">
-              {claimingId === player.id ? "Vinculando..." : player.handle}
-            </span>
-          </span>
-        </button>
-      ))}
-    </div>
+    <Card className="w-full max-w-2xl">
+      <CardContent className="pt-6">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <PlayerPicker value={choice} onChange={setChoice} disabled={submitting} />
+          <Button
+            type="submit"
+            disabled={submitting || !isChoiceComplete(choice)}
+            className="w-full bg-goat-lime text-black hover:bg-goat-lime-2 sm:w-auto sm:self-end"
+          >
+            {submitting ? "Vinculando..." : "Confirmar"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

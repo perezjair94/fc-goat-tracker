@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS } from "@/lib/data/store";
 import {
   claimPlayerAction,
+  createOwnPlayerAction,
   createMatchAction,
   createSessionAction,
   deleteMatchAction,
@@ -365,19 +366,31 @@ export async function signIn(email: string, password: string): Promise<void> {
   await loadState();
 }
 
-export async function signUp(email: string, password: string): Promise<void> {
+/** Quién es la persona que se registra: un jugador libre o uno nuevo. */
+export type PlayerChoice =
+  | { kind: "existing"; playerId: string }
+  | { kind: "new"; name: string; color: string };
+
+/**
+ * Crea la cuenta, inicia sesión y vincula el jugador elegido. Si el último
+ * paso falla, la cuenta ya existe y la persona puede elegir en /claim.
+ */
+export async function signUp(email: string, password: string, choice: PlayerChoice): Promise<Player> {
   const result = await signUpAction(email, password);
   if (!result.ok) throw new Error(result.error);
   await signIn(email, password);
+  return linkPlayer(choice);
+}
+
+export async function linkPlayer(choice: PlayerChoice): Promise<Player> {
+  return choice.kind === "existing"
+    ? run(claimPlayerAction(choice.playerId))
+    : run(createOwnPlayerAction(choice.name, choice.color));
 }
 
 export async function signOut(): Promise<void> {
   await getBrowserClient().auth.signOut();
   await loadState();
-}
-
-export async function claimPlayer(playerId: string): Promise<Player> {
-  return run(claimPlayerAction(playerId));
 }
 
 // ---------------------------------------------------------------------------

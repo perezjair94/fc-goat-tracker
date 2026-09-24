@@ -8,7 +8,7 @@ export default function ClaimPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="¿Quién eres?"
-        description="Elige tu jugador. Queda vinculado a tu cuenta y es quien firma los partidos que registres."
+        description="Elige tu jugador o crea uno nuevo si no estás en la lista. Queda vinculado a tu cuenta y firma los partidos que registres."
       />
       <ClaimPlayer />
     </div>

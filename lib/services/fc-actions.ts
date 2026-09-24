@@ -18,7 +18,7 @@ import {
   type SessionRow,
   type SettingsRow,
 } from "@/lib/supabase/rows";
-import { MATCH_MODES, type AppSettings, type Match, type Player, type Session } from "@/types";
+import { MATCH_MODES, getPlayerInitials, type AppSettings, type Match, type Player, type Session } from "@/types";
 import type { CreateMatchInput, CreateSessionInput } from "@/lib/services/fc-service";
 
 /**
@@ -73,6 +73,11 @@ const settingsSchema = z.object({
     koGoalDifference: z.number().int().min(1).max(99),
     koBonusPoints: nonNegativeInt,
   }),
+});
+
+const newPlayerSchema = z.object({
+  name: z.string().trim().min(1, "Escribe tu nombre.").max(40, "El nombre es demasiado largo."),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Elige un color."),
 });
 
 const signUpSchema = z.object({
@@ -243,6 +248,56 @@ export async function signUpAction(email: string, password: string): Promise<Act
     if (error instanceof z.ZodError) return fail(error);
     console.error("[fc-actions] signUp", error);
     return { ok: false, error: "No se pudo crear la cuenta." };
+  }
+}
+
+/** `@handle` a partir del nombre: minúsculas, sin tildes ni espacios. */
+function toHandle(name: string): string {
+  const slug = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 20);
+  return `@${slug || "jugador"}`;
+}
+
+/**
+ * Crea un jugador nuevo vinculado a la cuenta de la sesión. Si el `@handle`
+ * ya existe prueba con un sufijo numérico.
+ */
+export async function createOwnPlayerAction(name: string, color: string): Promise<ActionResult<Player>> {
+  try {
+    const parsed = newPlayerSchema.parse({ name, color });
+    const supabase = await getServerClient();
+    const { data: claims } = await supabase.auth.getClaims();
+    const userId = claims?.claims.sub;
+    if (!userId) return { ok: false, error: "Inicia sesión para crear tu jugador." };
+
+    const baseHandle = toHandle(parsed.name);
+    for (let attempt = 1; attempt <= 20; attempt++) {
+      const handle = attempt === 1 ? baseHandle : `${baseHandle}${attempt}`;
+      const { data, error } = await supabase
+        .from("players")
+        .insert({
+          name: parsed.name,
+          handle,
+          color: parsed.color,
+          initials: getPlayerInitials(parsed.name),
+          user_id: userId,
+        })
+        .select(PLAYER_COLUMNS)
+        .single<PlayerRow>();
+      if (!error) return { ok: true, data: toPlayer(data) };
+      if (error.code !== "23505") throw error;
+      if (error.message.includes("players_user_id_key")) {
+        return { ok: false, error: "Tu cuenta ya tiene un jugador." };
+      }
+      // handle repetido: siguiente intento
+    }
+    return { ok: false, error: "No se pudo generar un @handle libre. Prueba otro nombre." };
+  } catch (error) {
+    return fail(error);
   }
 }
 
