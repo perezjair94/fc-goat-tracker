@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlayerPicker, isChoiceComplete } from "@/components/player-picker";
-import { getAccount, getCurrentPlayerId, signIn, signUp, type PlayerChoice } from "@/lib/services/fc-service";
+import { NewPlayerFields, suggestColor, type NewPlayerValue } from "@/components/player-picker";
+import { useFcStore } from "@/hooks/use-fc-store";
+import { getAccount, getCurrentPlayerId, getPlayers, signIn, signUp } from "@/lib/services/fc-service";
 import { cn } from "@/lib/utils";
 
 type Mode = "signIn" | "signUp";
@@ -17,15 +18,21 @@ export function AuthForm() {
   const [mode, setMode] = useState<Mode>("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [choice, setChoice] = useState<PlayerChoice | null>(null);
+  const { data: players } = useFcStore(getPlayers);
+  // Color vacío = aún no eligió: se sugiere uno libre cuando cargan los jugadores.
+  const [newPlayer, setNewPlayer] = useState<NewPlayerValue>({ name: "", color: "" });
+  const playerFields = {
+    ...newPlayer,
+    color: newPlayer.color || suggestColor(players?.map((p) => p.color) ?? []),
+  };
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (mode === "signUp" && !isChoiceComplete(choice)) {
-      setError("Elige tu jugador o escribe tu nombre si eres nuevo.");
+    if (mode === "signUp" && !playerFields.name.trim()) {
+      setError("Escribe tu nombre de jugador.");
       return;
     }
     setSubmitting(true);
@@ -34,7 +41,7 @@ export function AuthForm() {
         await signIn(email.trim(), password);
         toast.success("Sesión iniciada");
       } else {
-        const player = await signUp(email.trim(), password, choice!);
+        const player = await signUp(email.trim(), password, { kind: "new", ...playerFields });
         toast.success(`Cuenta creada. Bienvenido, ${player.name}`);
       }
       router.push(getCurrentPlayerId() ? "/" : "/claim");
@@ -42,7 +49,7 @@ export function AuthForm() {
       const message = err instanceof Error ? err.message : "No se pudo continuar.";
       // La cuenta ya se creó y hay sesión: solo falló vincular el jugador.
       if (mode === "signUp" && getAccount()) {
-        toast.error(`${message} Elige tu jugador de nuevo.`);
+        toast.error(`${message} Crea tu jugador de nuevo.`);
         router.push("/claim");
         return;
       }
@@ -104,9 +111,8 @@ export function AuthForm() {
       </div>
 
       {mode === "signUp" ? (
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">¿Quién eres?</span>
-          <PlayerPicker value={choice} onChange={setChoice} disabled={submitting} />
+        <div className="rounded-xl border border-border bg-muted/30 p-3">
+          <NewPlayerFields value={playerFields} onChange={setNewPlayer} disabled={submitting} />
         </div>
       ) : null}
 
