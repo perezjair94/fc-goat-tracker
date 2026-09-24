@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
-import { Trophy } from "lucide-react";
 import { NAV_ITEMS } from "@/components/nav-items";
 
 function isActive(pathname: string, href: string) {
@@ -16,17 +15,6 @@ export function WorkspaceNav({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <nav className="flex h-full flex-col gap-6 p-4">
-      <Link
-        href="/"
-        onClick={onNavigate}
-        className="flex items-center gap-2 px-2 py-1 text-foreground"
-      >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Trophy className="size-4" />
-        </span>
-        <span className="text-sm font-semibold tracking-tight">FC GOAT Tracker</span>
-      </Link>
-
       <ul className="flex flex-1 flex-col gap-1">
         {NAV_ITEMS.map((item) => {
           const active = isActive(pathname, item.href);
