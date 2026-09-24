@@ -1,9 +1,11 @@
 import { DEFAULT_SETTINGS } from "@/lib/data/store";
 import {
+  claimPlayerAction,
   createMatchAction,
   createSessionAction,
   deleteMatchAction,
   saveSettingsAction,
+  signUpAction,
   updateMatchAction,
   type ActionResult,
 } from "@/lib/services/fc-actions";
@@ -48,13 +50,25 @@ import {
  * solo lectura) a una instantánea en memoria, y los getters la leen de forma
  * síncrona. `useFcStore` se encarga de cargarla y de re-renderizar.
  *
- * Escrituras: son async, pasan por Server Actions (`fc-actions.ts`) y al
- * terminar recargan la instantánea.
+ * Escrituras: son async, pasan por Server Actions (`fc-actions.ts`) con la
+ * sesión del usuario y al terminar recargan la instantánea. RLS decide qué
+ * se permite; `canEditMatch` solo sirve para mostrar u ocultar botones.
+ *
+ * Sesión: el login corre en el navegador (cookies de `@supabase/ssr`) y el
+ * proxy la refresca en cada petición.
  */
 
 export const FC_STORE_EVENT = "fc-goat:update";
 
+/** Cuenta con sesión iniciada. `playerId` es null hasta que reclama jugador. */
+export interface Account {
+  userId: string;
+  email: string;
+  playerId: string | null;
+}
+
 interface PersistedState {
+  account: Account | null;
   players: Player[];
   matches: Match[];
   sessions: Session[];
@@ -63,6 +77,7 @@ interface PersistedState {
 }
 
 const EMPTY_STATE: PersistedState = {
+  account: null,
   players: [],
   matches: [],
   sessions: [],
@@ -72,6 +87,7 @@ const EMPTY_STATE: PersistedState = {
 
 let state: PersistedState | null = null;
 let inflight: Promise<void> | null = null;
+let listeningToAuth = false;
 
 function readState(): PersistedState {
   return state ?? EMPTY_STATE;
@@ -82,9 +98,40 @@ export function isLoaded(): boolean {
   return state !== null;
 }
 
-async function fetchState(): Promise<PersistedState> {
+async function fetchAccount(): Promise<Account | null> {
   const supabase = getBrowserClient();
-  const [players, matches, sessions, seasons, settings] = await Promise.all([
+  // En el navegador basta con la sesión local: solo decide qué se muestra.
+  // Quien autoriza de verdad es RLS en cada escritura.
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
+  if (!user) return null;
+
+  const { data: player, error } = await supabase
+    .from("players")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle<{ id: string }>();
+  if (error) throw new Error(`No se pudo cargar tu jugador: ${error.message}`);
+
+  return { userId: user.id, email: user.email ?? "", playerId: player?.id ?? null };
+}
+
+function listenToAuth() {
+  if (listeningToAuth || typeof window === "undefined") return;
+  listeningToAuth = true;
+  getBrowserClient().auth.onAuthStateChange((event) => {
+    // Diferido: no se debe llamar a Supabase dentro del callback.
+    if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
+      setTimeout(() => void loadState().catch(() => {}), 0);
+    }
+  });
+}
+
+async function fetchState(): Promise<PersistedState> {
+  listenToAuth();
+  const supabase = getBrowserClient();
+  const [account, players, matches, sessions, seasons, settings] = await Promise.all([
+    fetchAccount(),
     supabase.from("players").select(PLAYER_COLUMNS).order("created_at").returns<PlayerRow[]>(),
     supabase.from("matches").select(MATCH_COLUMNS).returns<MatchRow[]>(),
     supabase.from("sessions").select(SESSION_COLUMNS).returns<SessionRow[]>(),
@@ -105,6 +152,7 @@ async function fetchState(): Promise<PersistedState> {
   }
 
   return {
+    account,
     players: (players.data ?? []).map(toPlayer),
     matches: matchList,
     sessions: (sessions.data ?? []).map((row) => toSession(row, matchIdsBySession.get(row.id) ?? [])),
@@ -187,7 +235,6 @@ export interface CreateMatchInput {
   sessionId?: string;
   notes?: string;
   evidenceUrl?: string;
-  createdBy: string;
 }
 
 export async function createMatch(input: CreateMatchInput): Promise<Match> {
@@ -240,7 +287,6 @@ export interface CreateSessionInput {
   name: string;
   date: string;
   season: number;
-  createdBy: string;
 }
 
 export async function createSession(input: CreateSessionInput): Promise<Session> {
@@ -284,6 +330,54 @@ export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSe
 
 export async function resetSettings(): Promise<AppSettings> {
   return run(saveSettingsAction(DEFAULT_SETTINGS));
+}
+
+// ---------------------------------------------------------------------------
+// Cuenta
+// ---------------------------------------------------------------------------
+
+export function getAccount(): Account | null {
+  return readState().account;
+}
+
+export function getCurrentPlayerId(): string | null {
+  return getAccount()?.playerId ?? null;
+}
+
+/** Jugadores que todavía se pueden reclamar. */
+export function getUnclaimedPlayers(): Player[] {
+  return getActivePlayers().filter((p) => !p.claimed);
+}
+
+/** Mismo criterio que la política RLS: autor o uno de los dos jugadores. */
+export function canEditMatch(match: Match): boolean {
+  const playerId = getCurrentPlayerId();
+  return playerId !== null && [match.createdBy, match.player1Id, match.player2Id].includes(playerId);
+}
+
+export async function signIn(email: string, password: string): Promise<void> {
+  const { error } = await getBrowserClient().auth.signInWithPassword({ email, password });
+  if (error) {
+    throw new Error(
+      error.code === "invalid_credentials" ? "Email o contraseña incorrectos." : error.message
+    );
+  }
+  await loadState();
+}
+
+export async function signUp(email: string, password: string): Promise<void> {
+  const result = await signUpAction(email, password);
+  if (!result.ok) throw new Error(result.error);
+  await signIn(email, password);
+}
+
+export async function signOut(): Promise<void> {
+  await getBrowserClient().auth.signOut();
+  await loadState();
+}
+
+export async function claimPlayer(playerId: string): Promise<Player> {
+  return run(claimPlayerAction(playerId));
 }
 
 // ---------------------------------------------------------------------------

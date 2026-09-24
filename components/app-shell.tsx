@@ -7,7 +7,7 @@ import { Menu, Plus, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WorkspaceNav } from "@/components/workspace-nav";
-import { PlayerSwitcher } from "@/components/player-switcher";
+import { AccountMenu } from "@/components/account-menu";
 import { useFcStore } from "@/hooks/use-fc-store";
 import { getSettings } from "@/lib/services/fc-service";
 
@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="flex-1" />
 
-          <PlayerSwitcher />
+          <AccountMenu />
         </header>
 
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>

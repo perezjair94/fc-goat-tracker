@@ -13,6 +13,8 @@ export interface Player {
   color: string;
   initials: string;
   active: boolean;
+  /** true si alguna cuenta ya reclamó este jugador. */
+  claimed?: boolean;
   createdAt: string;
 }
 

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFcStore } from "@/hooks/use-fc-store";
 import {
+  canEditMatch,
   deleteMatch,
   getMatch,
   getPlayer,
@@ -138,7 +139,7 @@ export function MatchDetailView({ id }: { id: string }) {
       </div>
 
       <div className="flex justify-end">
-        {confirmingDelete ? (
+        {!canEditMatch(match) ? null : confirmingDelete ? (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">¿Eliminar este partido?</span>
             <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>

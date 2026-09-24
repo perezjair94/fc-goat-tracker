@@ -13,6 +13,7 @@ export interface PlayerRow {
   color: string;
   initials: string;
   active: boolean;
+  claimed: boolean;
   created_at: string;
 }
 
@@ -58,7 +59,7 @@ export interface SettingsRow {
   ko_bonus_points: number;
 }
 
-export const PLAYER_COLUMNS = "id, name, handle, color, initials, active, created_at";
+export const PLAYER_COLUMNS = "id, name, handle, color, initials, active, claimed, created_at";
 export const SEASON_COLUMNS = "id, year, name, active";
 export const SESSION_COLUMNS = "id, name, date, season, created_by, created_at";
 export const MATCH_COLUMNS =
@@ -74,6 +75,7 @@ export function toPlayer(row: PlayerRow): Player {
     color: row.color,
     initials: row.initials,
     active: row.active,
+    claimed: row.claimed,
     createdAt: row.created_at,
   };
 }

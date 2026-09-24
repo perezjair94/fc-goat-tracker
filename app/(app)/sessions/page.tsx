@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalendarDays, Layers3, Plus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -24,7 +25,8 @@ import { formatDate } from "@/lib/format";
 
 export default function SessionsPage() {
   const { data: sessions, ready } = useFcStore(getSessions);
-  const { currentPlayerId } = useCurrentPlayer();
+  const router = useRouter();
+  const { account, currentPlayerId } = useCurrentPlayer();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -36,13 +38,14 @@ export default function SessionsPage() {
     e.preventDefault();
     if (!name.trim() || creating) return;
     if (!currentPlayerId) {
-      toast.error("Elige quién eres antes de crear una sesión.");
+      toast.error(account ? "Elige tu jugador antes de crear una sesión." : "Inicia sesión para crear una sesión.");
+      router.push(account ? "/claim" : "/login");
       return;
     }
     setCreating(true);
     try {
       const season = getActiveSeason()?.year ?? new Date().getFullYear();
-      await createSession({ name: name.trim(), date, season, createdBy: currentPlayerId });
+      await createSession({ name: name.trim(), date, season });
       toast.success("Sesión creada");
       setName("");
       setDate(today);
@@ -60,7 +63,10 @@ export default function SessionsPage() {
         title="Sesiones"
         description="Agrupa partidos jugados el mismo día o encuentro."
         actions={
-          <Button size="sm" className="gap-1.5 bg-goat-lime text-black hover:bg-goat-lime-2" onClick={() => setOpen(true)}>
+          <Button size="sm" className="gap-1.5 bg-goat-lime text-black hover:bg-goat-lime-2" onClick={() => {
+            if (currentPlayerId) setOpen(true);
+            else router.push(account ? "/claim" : "/login");
+          }}>
             <Plus className="size-4" />
             Nueva sesión
           </Button>

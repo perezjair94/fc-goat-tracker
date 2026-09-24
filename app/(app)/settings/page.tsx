@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RequirePlayer } from "@/components/require-player";
 import { useFcStore } from "@/hooks/use-fc-store";
 import { getSeasons, getSettings, resetSettings, updateSettings } from "@/lib/services/fc-service";
 import type { AppSettings, GoatRules, Season } from "@/types";
@@ -26,7 +27,11 @@ export default function SettingsPage() {
 
   if (!ready || !settings) return null;
 
-  return <SettingsForm key={settings.activeSeasonId} initialSettings={settings} seasons={seasons ?? []} />;
+  return (
+    <RequirePlayer action="cambiar la configuración">
+      <SettingsForm key={settings.activeSeasonId} initialSettings={settings} seasons={seasons ?? []} />
+    </RequirePlayer>
+  );
 }
 
 function SettingsForm({ initialSettings, seasons }: { initialSettings: AppSettings; seasons: Season[] }) {

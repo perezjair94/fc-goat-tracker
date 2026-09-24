@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/select";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { useFcStore } from "@/hooks/use-fc-store";
-import { useCurrentPlayer } from "@/hooks/use-current-player";
 import {
   createMatch,
   getActivePlayers,
@@ -37,7 +36,6 @@ export function MatchForm({ defaultSessionId, redirectTo = "/history" }: MatchFo
   const router = useRouter();
   const { data: players, ready } = useFcStore(getActivePlayers);
   const { data: sessions } = useFcStore(getSessions);
-  const { currentPlayerId } = useCurrentPlayer();
 
   const [player1Id, setPlayer1Id] = useState("");
   const [player2Id, setPlayer2Id] = useState("");
@@ -96,7 +94,6 @@ export function MatchForm({ defaultSessionId, redirectTo = "/history" }: MatchFo
         season,
         sessionId: sessionId === "none" ? undefined : sessionId,
         notes: notes.trim() || undefined,
-        createdBy: currentPlayerId ?? player1Id,
       });
       toast.success("Partido registrado");
       router.push(redirectTo);
