@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NewPlayerFields, suggestColor, type NewPlayerValue } from "@/components/player-picker";
+import { NewPlayerFields, suggestColor, type NewPlayerValue } from "@/components/new-player-fields";
 import { useFcStore } from "@/hooks/use-fc-store";
 import { getAccount, getCurrentPlayerId, getPlayers, signIn, signUp } from "@/lib/services/fc-service";
 import { cn } from "@/lib/utils";
@@ -41,16 +41,16 @@ export function AuthForm() {
         await signIn(email.trim(), password);
         toast.success("Sesión iniciada");
       } else {
-        const player = await signUp(email.trim(), password, { kind: "new", ...playerFields });
+        const player = await signUp(email.trim(), password, playerFields);
         toast.success(`Cuenta creada. Bienvenido, ${player.name}`);
       }
-      router.push(getCurrentPlayerId() ? "/" : "/claim");
+      router.push(getCurrentPlayerId() ? "/" : "/onboarding");
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo continuar.";
       // La cuenta ya se creó y hay sesión: solo falló vincular el jugador.
       if (mode === "signUp" && getAccount()) {
         toast.error(`${message} Crea tu jugador de nuevo.`);
-        router.push("/claim");
+        router.push("/onboarding");
         return;
       }
       setError(message);

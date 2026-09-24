@@ -1,6 +1,5 @@
 import { DEFAULT_SETTINGS } from "@/lib/data/store";
 import {
-  claimPlayerAction,
   createOwnPlayerAction,
   createMatchAction,
   createSessionAction,
@@ -55,13 +54,15 @@ import {
  * sesión del usuario y al terminar recargan la instantánea. RLS decide qué
  * se permite; `canEditMatch` solo sirve para mostrar u ocultar botones.
  *
+ * Cada cuenta tiene exactamente un jugador, que se crea al registrarse.
+ *
  * Sesión: el login corre en el navegador (cookies de `@supabase/ssr`) y el
  * proxy la refresca en cada petición.
  */
 
 export const FC_STORE_EVENT = "fc-goat:update";
 
-/** Cuenta con sesión iniciada. `playerId` es null hasta que reclama jugador. */
+/** Cuenta con sesión iniciada. `playerId` es null si la cuenta aún no tiene jugador. */
 export interface Account {
   userId: string;
   email: string;
@@ -345,11 +346,6 @@ export function getCurrentPlayerId(): string | null {
   return getAccount()?.playerId ?? null;
 }
 
-/** Jugadores que todavía se pueden reclamar. */
-export function getUnclaimedPlayers(): Player[] {
-  return getActivePlayers().filter((p) => !p.claimed);
-}
-
 /** Mismo criterio que la política RLS: autor o uno de los dos jugadores. */
 export function canEditMatch(match: Match): boolean {
   const playerId = getCurrentPlayerId();
@@ -366,26 +362,25 @@ export async function signIn(email: string, password: string): Promise<void> {
   await loadState();
 }
 
-/** Quién es la persona que se registra: un jugador libre o uno nuevo. */
-export type PlayerChoice =
-  | { kind: "existing"; playerId: string }
-  | { kind: "new"; name: string; color: string };
+export interface NewPlayerInput {
+  name: string;
+  color: string;
+}
 
 /**
- * Crea la cuenta, inicia sesión y vincula el jugador elegido. Si el último
- * paso falla, la cuenta ya existe y la persona puede elegir en /claim.
+ * Crea la cuenta, inicia sesión y crea su jugador. Si el último paso falla,
+ * la cuenta ya existe y la persona termina en /onboarding.
  */
-export async function signUp(email: string, password: string, choice: PlayerChoice): Promise<Player> {
+export async function signUp(email: string, password: string, player: NewPlayerInput): Promise<Player> {
   const result = await signUpAction(email, password);
   if (!result.ok) throw new Error(result.error);
   await signIn(email, password);
-  return linkPlayer(choice);
+  return createOwnPlayer(player);
 }
 
-export async function linkPlayer(choice: PlayerChoice): Promise<Player> {
-  return choice.kind === "existing"
-    ? run(claimPlayerAction(choice.playerId))
-    : run(createOwnPlayerAction(choice.name, choice.color));
+/** Crea el jugador de la cuenta de la sesión (solo si todavía no tiene). */
+export async function createOwnPlayer(player: NewPlayerInput): Promise<Player> {
+  return run(createOwnPlayerAction(player.name, player.color));
 }
 
 export async function signOut(): Promise<void> {

@@ -27,10 +27,10 @@ export function RequirePlayer({ children, action }: { children: ReactNode; actio
     return (
       <EmptyState
         icon={UserRoundPlus}
-        title="Elige tu jugador"
-        description={`Vincula tu cuenta con tu jugador para ${action}.`}
-        actionLabel="Elegir jugador"
-        actionHref="/claim"
+        title="Crea tu jugador"
+        description={`Tu cuenta todavía no tiene jugador. Créalo para ${action}.`}
+        actionLabel="Crear jugador"
+        actionHref="/onboarding"
       />
     );
   }

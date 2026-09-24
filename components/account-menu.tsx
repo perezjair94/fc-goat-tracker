@@ -64,9 +64,9 @@ export function AccountMenu() {
         <div className="px-1.5 py-1 text-xs text-muted-foreground">{account.email}</div>
         <DropdownMenuSeparator />
         {!player ? (
-          <DropdownMenuItem render={<Link href="/claim" />}>
+          <DropdownMenuItem render={<Link href="/onboarding" />}>
             <UserRoundPlus />
-            Elegir mi jugador
+            Crear mi jugador
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onClick={handleSignOut}>

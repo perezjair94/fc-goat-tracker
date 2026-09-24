@@ -33,7 +33,7 @@ import type { CreateMatchInput, CreateSessionInput } from "@/lib/services/fc-ser
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-const NO_PERMISSION = "No tienes permiso. Inicia sesión y elige tu jugador.";
+const NO_PERMISSION = "No tienes permiso. Inicia sesión y crea tu jugador.";
 
 const id = z.string().trim().min(1).max(128);
 const score = z.number().int().min(0).max(99);
@@ -296,33 +296,6 @@ export async function createOwnPlayerAction(name: string, color: string): Promis
       // handle repetido: siguiente intento
     }
     return { ok: false, error: "No se pudo generar un @handle libre. Prueba otro nombre." };
-  } catch (error) {
-    return fail(error);
-  }
-}
-
-/** Vincula la cuenta de la sesión con un jugador que aún no tiene dueño. */
-export async function claimPlayerAction(playerId: string): Promise<ActionResult<Player>> {
-  try {
-    const parsedId = id.parse(playerId);
-    const supabase = await getServerClient();
-    const { data: claims } = await supabase.auth.getClaims();
-    const userId = claims?.claims.sub;
-    if (!userId) return { ok: false, error: "Inicia sesión para elegir tu jugador." };
-
-    const { data, error } = await supabase
-      .from("players")
-      .update({ user_id: userId })
-      .eq("id", parsedId)
-      .is("user_id", null)
-      .select(PLAYER_COLUMNS)
-      .maybeSingle<PlayerRow>();
-    if (error) {
-      if (error.code === "23505") return { ok: false, error: "Tu cuenta ya tiene un jugador." };
-      throw error;
-    }
-    if (!data) return { ok: false, error: "Ese jugador ya tiene dueño." };
-    return { ok: true, data: toPlayer(data) };
   } catch (error) {
     return fail(error);
   }

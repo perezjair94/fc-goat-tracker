@@ -38,8 +38,8 @@ export default function SessionsPage() {
     e.preventDefault();
     if (!name.trim() || creating) return;
     if (!currentPlayerId) {
-      toast.error(account ? "Elige tu jugador antes de crear una sesión." : "Inicia sesión para crear una sesión.");
-      router.push(account ? "/claim" : "/login");
+      toast.error(account ? "Crea tu jugador antes de crear una sesión." : "Inicia sesión para crear una sesión.");
+      router.push(account ? "/onboarding" : "/login");
       return;
     }
     setCreating(true);
@@ -65,7 +65,7 @@ export default function SessionsPage() {
         actions={
           <Button size="sm" className="gap-1.5 bg-goat-lime text-black hover:bg-goat-lime-2" onClick={() => {
             if (currentPlayerId) setOpen(true);
-            else router.push(account ? "/claim" : "/login");
+            else router.push(account ? "/onboarding" : "/login");
           }}>
             <Plus className="size-4" />
             Nueva sesión
