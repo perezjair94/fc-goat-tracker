@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,14 @@ export function AuthForm() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="password">Contraseña</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="password">Contraseña</Label>
+          {mode === "signIn" ? (
+            <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground">
+              ¿Olvidaste tu contraseña?
+            </Link>
+          ) : null}
+        </div>
         <Input
           id="password"
           type="password"

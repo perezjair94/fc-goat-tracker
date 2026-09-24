@@ -383,6 +383,44 @@ export async function createOwnPlayer(player: NewPlayerInput): Promise<Player> {
   return run(createOwnPlayerAction(player.name, player.color));
 }
 
+/**
+ * Envía el correo para restablecer la contraseña. El enlace vuelve a
+ * /reset-password con un `code` que el cliente canjea solo (PKCE), así que
+ * hay que abrirlo en el mismo navegador donde se pidió.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const { error } = await getBrowserClient().auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) {
+    throw new Error(
+      error.code === "over_email_send_rate_limit"
+        ? "Se enviaron demasiados correos. Espera un rato e inténtalo de nuevo."
+        : error.message
+    );
+  }
+}
+
+/** true si hay sesión, p. ej. tras canjear el enlace de recuperación. */
+export async function hasSession(): Promise<boolean> {
+  // getSession() espera a que el cliente termine de canjear el `code` de la URL.
+  const { data } = await getBrowserClient().auth.getSession();
+  return data.session !== null;
+}
+
+export async function updatePassword(password: string): Promise<void> {
+  const { error } = await getBrowserClient().auth.updateUser({ password });
+  if (error) {
+    throw new Error(
+      error.code === "same_password"
+        ? "La nueva contraseña debe ser distinta de la anterior."
+        : error.code === "weak_password"
+          ? "La contraseña es demasiado débil."
+          : error.message
+    );
+  }
+}
+
 export async function signOut(): Promise<void> {
   await getBrowserClient().auth.signOut();
   await loadState();
