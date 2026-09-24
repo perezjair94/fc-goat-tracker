@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Flame, Trophy } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -14,20 +15,41 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFcStore } from "@/hooks/use-fc-store";
 import { getRanking } from "@/lib/services/fc-service";
-import { formatWinRate } from "@/types";
+import { MATCH_MODES, MATCH_MODE_LABELS, formatWinRate, isMatchMode, type MatchMode } from "@/types";
 import { cn } from "@/lib/utils";
 
 export default function RankingPage() {
-  const { data: ranking, ready } = useFcStore(getRanking);
+  const [mode, setMode] = useState<MatchMode | "all">("all");
+  const { data: ranking, ready } = useFcStore(() =>
+    mode === "all"
+      ? getRanking()
+      : // En el ranking de un tipo solo aparecen quienes han jugado ese tipo.
+        getRanking(mode).filter((entry) => entry.played > 0)
+  );
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Ranking GOAT"
-        description="Calculado en vivo a partir del historial de partidos: puntos, win rate y desempate por diferencia de goles."
+        description="Calculado en vivo a partir del historial de partidos: puntos, win rate y desempate por diferencia de goles. Elige un tipo de partido para ver su ranking por separado."
       />
+
+      <Tabs
+        value={mode}
+        onValueChange={(value) => setMode(isMatchMode(value) ? value : "all")}
+      >
+        <TabsList className="h-auto w-full flex-wrap sm:w-fit">
+          <TabsTrigger value="all">General</TabsTrigger>
+          {MATCH_MODES.map((option) => (
+            <TabsTrigger key={option} value={option}>
+              {MATCH_MODE_LABELS[option]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {!ready ? (
         <div className="flex flex-col gap-2">
@@ -126,7 +148,11 @@ export default function RankingPage() {
         <EmptyState
           icon={Trophy}
           title="Todavía no hay ranking"
-          description="Registra el primer partido para que el ranking se calcule automáticamente."
+          description={
+            mode === "all"
+              ? "Registra el primer partido para que el ranking se calcule automáticamente."
+              : `Todavía no hay partidos de ${MATCH_MODE_LABELS[mode]}. Registra uno para abrir este ranking.`
+          }
           actionLabel="Registrar partido"
           actionHref="/matches/new"
         />

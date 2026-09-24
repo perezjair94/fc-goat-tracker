@@ -15,20 +15,25 @@ import {
 } from "@/components/ui/select";
 import { useFcStore } from "@/hooks/use-fc-store";
 import { getMatches, getPlayers, getRules } from "@/lib/services/fc-service";
+import { MATCH_MODES, MATCH_MODE_LABELS, isMatchMode } from "@/types";
 
 export default function HistoryPage() {
   const { data: matches, ready } = useFcStore(getMatches);
   const { data: players } = useFcStore(getPlayers);
   const rules = getRules();
   const [playerFilter, setPlayerFilter] = useState("all");
+  const [modeFilter, setModeFilter] = useState("all");
 
   const playersById = useMemo(() => new Map(players?.map((p) => [p.id, p]) ?? []), [players]);
 
   const filtered = useMemo(() => {
     if (!matches) return [];
-    if (playerFilter === "all") return matches;
-    return matches.filter((m) => m.player1Id === playerFilter || m.player2Id === playerFilter);
-  }, [matches, playerFilter]);
+    return matches.filter(
+      (m) =>
+        (playerFilter === "all" || m.player1Id === playerFilter || m.player2Id === playerFilter) &&
+        (modeFilter === "all" || m.mode === modeFilter)
+    );
+  }, [matches, playerFilter, modeFilter]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -36,23 +41,42 @@ export default function HistoryPage() {
         title="Historial"
         description="Todos los partidos registrados, del más reciente al más antiguo."
         actions={
-          <Select value={playerFilter} onValueChange={(value) => setPlayerFilter(value ?? "all")}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Todos los jugadores">
-                {(value: string) =>
-                  value === "all" ? "Todos los jugadores" : players?.find((p) => p.id === value)?.name ?? "Todos los jugadores"
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los jugadores</SelectItem>
-              {players?.map((player) => (
-                <SelectItem key={player.id} value={player.id}>
-                  {player.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap gap-2">
+            <Select value={modeFilter} onValueChange={(value) => setModeFilter(value ?? "all")}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Todos los tipos">
+                  {(value: string) =>
+                    isMatchMode(value) ? MATCH_MODE_LABELS[value] : "Todos los tipos"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los tipos</SelectItem>
+                {MATCH_MODES.map((mode) => (
+                  <SelectItem key={mode} value={mode}>
+                    {MATCH_MODE_LABELS[mode]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={playerFilter} onValueChange={(value) => setPlayerFilter(value ?? "all")}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Todos los jugadores">
+                  {(value: string) =>
+                    value === "all" ? "Todos los jugadores" : players?.find((p) => p.id === value)?.name ?? "Todos los jugadores"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los jugadores</SelectItem>
+                {players?.map((player) => (
+                  <SelectItem key={player.id} value={player.id}>
+                    {player.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         }
       />
 

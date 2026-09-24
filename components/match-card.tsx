@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { KOBadge } from "@/components/outcome-badge";
+import { KOBadge, MatchModeBadge } from "@/components/outcome-badge";
 import { formatRelative } from "@/lib/format";
 import type { Match, Player } from "@/types";
 import { isKnockout } from "@/types";
@@ -43,6 +43,7 @@ export function MatchCard({ match, player1, player2, rules }: MatchCardProps) {
       </div>
 
       <div className="hidden shrink-0 items-center gap-2 sm:flex">
+        <MatchModeBadge mode={match.mode} />
         {ko ? <KOBadge /> : null}
         <span className="text-xs text-muted-foreground">{formatRelative(match.createdAt)}</span>
       </div>

@@ -16,12 +16,36 @@ export interface Player {
   createdAt: string;
 }
 
+/** Tipo de partido según cómo se armaron los equipos. */
+export type MatchMode = "global95" | "ultimate" | "squad";
+
+export const MATCH_MODES: MatchMode[] = ["global95", "ultimate", "squad"];
+
+export const DEFAULT_MATCH_MODE: MatchMode = "squad";
+
+export const MATCH_MODE_LABELS: Record<MatchMode, string> = {
+  global95: "95 de media global",
+  ultimate: "Ultimate Team",
+  squad: "Plantilla normal",
+};
+
+export const MATCH_MODE_SHORT_LABELS: Record<MatchMode, string> = {
+  global95: "95 GLOBAL",
+  ultimate: "UT",
+  squad: "PLANTILLA",
+};
+
+export function isMatchMode(value: unknown): value is MatchMode {
+  return typeof value === "string" && (MATCH_MODES as string[]).includes(value);
+}
+
 export interface Match {
   id: string;
   player1Id: string;
   player2Id: string;
   score1: number;
   score2: number;
+  mode: MatchMode;
   season: number;
   sessionId?: string;
   notes?: string;

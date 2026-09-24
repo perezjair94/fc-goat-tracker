@@ -25,6 +25,8 @@ import {
   getRules,
   getSessions,
 } from "@/lib/services/fc-service";
+import { cn } from "@/lib/utils";
+import { DEFAULT_MATCH_MODE, MATCH_MODES, MATCH_MODE_LABELS, type MatchMode } from "@/types";
 
 interface MatchFormProps {
   defaultSessionId?: string;
@@ -41,6 +43,7 @@ export function MatchForm({ defaultSessionId, redirectTo = "/history" }: MatchFo
   const [player2Id, setPlayer2Id] = useState("");
   const [score1, setScore1] = useState("0");
   const [score2, setScore2] = useState("0");
+  const [mode, setMode] = useState<MatchMode>(DEFAULT_MATCH_MODE);
   const [sessionId, setSessionId] = useState(defaultSessionId ?? "none");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +92,7 @@ export function MatchForm({ defaultSessionId, redirectTo = "/history" }: MatchFo
         player2Id,
         score1: s1,
         score2: s2,
+        mode,
         season,
         sessionId: sessionId === "none" ? undefined : sessionId,
         notes: notes.trim() || undefined,
@@ -105,6 +109,29 @@ export function MatchForm({ defaultSessionId, redirectTo = "/history" }: MatchFo
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-sm font-medium">Tipo de partido</legend>
+        <div role="radiogroup" className="grid gap-2 sm:grid-cols-3">
+          {MATCH_MODES.map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={mode === option}
+              onClick={() => setMode(option)}
+              className={cn(
+                "rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors",
+                mode === option
+                  ? "border-goat-lime bg-goat-lime/15 text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-goat-lime/40 hover:text-foreground"
+              )}
+            >
+              {MATCH_MODE_LABELS[option]}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label htmlFor="player1">Jugador 1</Label>
