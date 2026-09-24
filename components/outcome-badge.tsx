@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { MatchOutcome } from "@/types";
+import { MATCH_MODE_LABELS, MATCH_MODE_SHORT_LABELS, type MatchMode, type MatchOutcome } from "@/types";
 
 const LABELS: Record<MatchOutcome, string> = {
   win: "WIN",
@@ -36,6 +36,20 @@ export function KOBadge({ className }: { className?: string }) {
       )}
     >
       K.O.
+    </span>
+  );
+}
+
+export function MatchModeBadge({ mode, className }: { mode: MatchMode; className?: string }) {
+  return (
+    <span
+      title={MATCH_MODE_LABELS[mode]}
+      className={cn(
+        "inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wide text-muted-foreground",
+        className
+      )}
+    >
+      {MATCH_MODE_SHORT_LABELS[mode]}
     </span>
   );
 }

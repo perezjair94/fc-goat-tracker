@@ -6,12 +6,15 @@ import {
   SEED_SESSIONS,
 } from "@/lib/data/store";
 import {
+  DEFAULT_MATCH_MODE,
   getHeadToHead as computeHeadToHead,
+  isMatchMode,
   getRanking as computeRanking,
   type AppSettings,
   type GoatRules,
   type HeadToHead,
   type Match,
+  type MatchMode,
   type Player,
   type RankingEntry,
   type Season,
@@ -55,7 +58,7 @@ function readState(): PersistedState {
     const parsed = JSON.parse(raw) as Partial<PersistedState>;
     return {
       players: parsed.players ?? SEED_PLAYERS,
-      matches: parsed.matches ?? SEED_MATCHES,
+      matches: (parsed.matches ?? SEED_MATCHES).map(normalizeMatch),
       sessions: parsed.sessions ?? SEED_SESSIONS,
       seasons: parsed.seasons ?? SEED_SEASONS,
       settings: parsed.settings ?? DEFAULT_SETTINGS,
@@ -63,6 +66,11 @@ function readState(): PersistedState {
   } catch {
     return seedState();
   }
+}
+
+/** Partidos guardados antes de existir `mode` se consideran de plantilla normal. */
+function normalizeMatch(match: Match): Match {
+  return isMatchMode(match.mode) ? match : { ...match, mode: DEFAULT_MATCH_MODE };
 }
 
 function writeState(state: PersistedState): void {
@@ -122,6 +130,7 @@ export interface CreateMatchInput {
   player2Id: string;
   score1: number;
   score2: number;
+  mode: MatchMode;
   season: number;
   sessionId?: string;
   notes?: string;
@@ -136,6 +145,9 @@ export function createMatch(input: CreateMatchInput): Match {
   if (input.score1 < 0 || input.score2 < 0) {
     throw new Error("El marcador no puede ser negativo.");
   }
+  if (!isMatchMode(input.mode)) {
+    throw new Error("Selecciona un tipo de partido válido.");
+  }
 
   const state = readState();
   const match: Match = {
@@ -144,6 +156,7 @@ export function createMatch(input: CreateMatchInput): Match {
     player2Id: input.player2Id,
     score1: input.score1,
     score2: input.score2,
+    mode: input.mode,
     season: input.season,
     sessionId: input.sessionId,
     notes: input.notes,
@@ -172,6 +185,9 @@ export function updateMatch(id: string, patch: Partial<CreateMatchInput>): Match
   const updated: Match = { ...existing, ...patch };
   if (updated.player1Id === updated.player2Id) {
     throw new Error("Un partido necesita dos jugadores distintos.");
+  }
+  if (!isMatchMode(updated.mode)) {
+    throw new Error("Selecciona un tipo de partido válido.");
   }
 
   state.matches = state.matches.map((m) => (m.id === id ? updated : m));
@@ -272,9 +288,11 @@ export function resetSettings(): AppSettings {
 // Datos derivados
 // ---------------------------------------------------------------------------
 
-export function getRanking(): RankingEntry[] {
+/** Ranking GOAT general, o solo con los partidos de un tipo si se pasa `mode`. */
+export function getRanking(mode?: MatchMode): RankingEntry[] {
   const state = readState();
-  return computeRanking(state.players, state.matches, state.settings.rules);
+  const matches = mode ? state.matches.filter((m) => m.mode === mode) : state.matches;
+  return computeRanking(state.players, matches, state.settings.rules);
 }
 
 export function getHeadToHead(playerAId: string, playerBId: string): HeadToHead {

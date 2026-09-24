@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarClock, Layers3, StickyNote, Swords, Trash2, Zap } from "lucide-react";
+import { ArrowLeft, CalendarClock, Gamepad2, Layers3, StickyNote, Swords, Trash2, Zap } from "lucide-react";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import {
   getSession,
 } from "@/lib/services/fc-service";
 import { formatDateTime } from "@/lib/format";
-import { getMatchResults, isKnockout } from "@/types";
+import { MATCH_MODE_LABELS, getMatchResults, isKnockout } from "@/types";
 
 export function MatchDetailView({ id }: { id: string }) {
   const router = useRouter();
@@ -97,6 +97,13 @@ export function MatchDetailView({ id }: { id: string }) {
           <div>
             <p className="text-muted-foreground">Jugado</p>
             <p className="font-medium">{formatDateTime(match.createdAt)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-sm">
+          <Gamepad2 className="size-4 shrink-0 text-muted-foreground" />
+          <div>
+            <p className="text-muted-foreground">Tipo de partido</p>
+            <p className="font-medium">{MATCH_MODE_LABELS[match.mode]}</p>
           </div>
         </div>
         {session ? (
