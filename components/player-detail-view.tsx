@@ -7,6 +7,7 @@ import { StatCard } from "@/components/stat-card";
 import { MatchCard } from "@/components/match-card";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SeasonSelect, useSeasonFilter } from "@/components/season-select";
 import { useFcStore } from "@/hooks/use-fc-store";
 import {
   getMatchesForPlayer,
@@ -20,8 +21,9 @@ import { formatWinRate } from "@/types";
 export function PlayerDetailView({ id }: { id: string }) {
   const { data: player, ready } = useFcStore(() => getPlayer(id));
   const { data: players } = useFcStore(getPlayers);
-  const { data: ranking } = useFcStore(getRanking);
-  const { data: matches } = useFcStore(() => getMatchesForPlayer(id));
+  const [season, setSeason] = useSeasonFilter();
+  const { data: ranking } = useFcStore(() => getRanking({ season }));
+  const { data: matches } = useFcStore(() => getMatchesForPlayer(id, season));
   const rules = getRules();
 
   if (!ready) {
@@ -45,15 +47,19 @@ export function PlayerDetailView({ id }: { id: string }) {
     );
   }
 
-  const entry = ranking?.find((e) => e.player.id === id);
+  // Sin partidos en la temporada no tiene puesto en el ranking.
+  const entry = ranking?.find((e) => e.player.id === id && e.played > 0);
   const playersById = new Map(players?.map((p) => [p.id, p]) ?? []);
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/players" className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-3.5" />
-        Jugadores
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/players" className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-3.5" />
+          Jugadores
+        </Link>
+        <SeasonSelect value={season} onChange={setSeason} />
+      </div>
 
       <div className="flex flex-col items-start gap-4 rounded-2xl border border-border bg-card p-6 sm:flex-row sm:items-center">
         <PlayerAvatar player={player} size="xl" />
@@ -86,7 +92,7 @@ export function PlayerDetailView({ id }: { id: string }) {
           />
         </div>
       ) : (
-        <EmptyState icon={Trophy} title="Sin partidos todavía" description="Este jugador aún no tiene resultados registrados." />
+        <EmptyState icon={Trophy} title="Sin partidos todavía" description="Este jugador aún no tiene resultados registrados en esta temporada." />
       )}
 
       <div className="flex flex-col gap-3">

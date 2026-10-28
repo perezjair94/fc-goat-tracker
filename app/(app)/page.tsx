@@ -8,18 +8,33 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { MatchCard } from "@/components/match-card";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatSeasonRange } from "@/components/season-select";
 import { useFcStore } from "@/hooks/use-fc-store";
-import { getActivePlayers, getMatches, getPlayers, getRanking, getRules } from "@/lib/services/fc-service";
+import {
+  getActivePlayers,
+  getCurrentSeason,
+  getMatches,
+  getPlayers,
+  getRanking,
+  getRules,
+  getSeason,
+  getSeasonChampion,
+} from "@/lib/services/fc-service";
 import { formatWinRate } from "@/types";
 
+/** El dashboard muestra la temporada actual y el campeón de la anterior. */
 export default function DashboardPage() {
-  const { data: ranking, ready: rankingReady } = useFcStore(getRanking);
-  const { data: matches, ready: matchesReady } = useFcStore(getMatches);
+  const { data: season, ready } = useFcStore(getCurrentSeason);
+  const seasonNumber = season?.number ?? "all";
+  const { data: ranking } = useFcStore(() => getRanking({ season: seasonNumber }));
+  const { data: matches } = useFcStore(() => getMatches(seasonNumber));
+  const { data: anyMatches } = useFcStore(() => getMatches().length > 0);
+  const { data: previous } = useFcStore(() => (season ? getSeason(season.number - 1) : undefined));
+  const { data: champion } = useFcStore(() => (previous ? getSeasonChampion(previous.number) : undefined));
   const { data: players } = useFcStore(getPlayers);
   const { data: activePlayers } = useFcStore(getActivePlayers);
   const rules = getRules();
 
-  const ready = rankingReady && matchesReady;
   const playersById = new Map(players?.map((p) => [p.id, p]) ?? []);
 
   if (!ready) {
@@ -35,7 +50,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (!matches || matches.length === 0 || !ranking || ranking.length === 0) {
+  if (!anyMatches) {
     return (
       <EmptyState
         icon={Trophy}
@@ -47,6 +62,31 @@ export default function DashboardPage() {
     );
   }
 
+  const seasonLine = season ? (
+    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+      {season.name} · {formatSeasonRange(season)}
+    </p>
+  ) : null;
+  const championHero =
+    champion && previous ? <GoatHero entry={champion} label={`Campeón · ${previous.name}`} /> : null;
+
+  // Temporada recién empezada: todavía no hay ranking, se muestra al campeón.
+  if (!matches || matches.length === 0 || !ranking || ranking.length === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        {seasonLine}
+        {championHero}
+        <EmptyState
+          icon={Trophy}
+          title={season ? `Arranca la ${season.name}` : "Sin partidos todavía"}
+          description="El ranking empieza de cero. Registra el primer partido de la temporada para ver quién es el nuevo GOAT."
+          actionLabel="Registrar partido"
+          actionHref="/matches/new"
+        />
+      </div>
+    );
+  }
+
   const leader = ranking[0];
   const totalGoals = matches.reduce((sum, m) => sum + m.score1 + m.score2, 0);
   const koCount = matches.filter((m) => Math.abs(m.score1 - m.score2) >= rules.koGoalDifference && m.score1 !== m.score2).length;
@@ -55,7 +95,19 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <GoatHero entry={leader} />
+      {seasonLine}
+      <GoatHero entry={leader} label={season ? `GOAT · ${season.name}` : undefined} />
+      {champion && previous ? (
+        <Link
+          href="/ranking"
+          className="-mt-3 flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <Trophy className="size-3.5 text-goat-lime" />
+          Campeón de la {previous.name}:
+          <span className="font-semibold text-foreground">{champion.player.name}</span>
+          <span className="font-mono">{champion.points} pts</span>
+        </Link>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Partidos" value={matches.length} icon={Swords} />

@@ -64,11 +64,35 @@ export interface Session {
   createdAt: string;
 }
 
+/**
+ * Una temporada empieza en `startsOn` y termina el día antes de que empiece
+ * la siguiente (`endsOn`, vacío si es la última). Las fechas son días
+ * `YYYY-MM-DD` en hora de Bogotá. `Match.season` y `Session.season` guardan
+ * su `number`.
+ */
 export interface Season {
   id: string;
-  year: number;
+  number: number;
   name: string;
-  active: boolean;
+  startsOn: string;
+  endsOn?: string;
+}
+
+export const SEASON_TIME_ZONE = "America/Bogota";
+
+/** Día `YYYY-MM-DD` de un instante en hora de Bogotá. */
+export function toSeasonDay(date: Date = new Date()): string {
+  // en-CA formatea como YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: SEASON_TIME_ZONE }).format(date);
+}
+
+/**
+ * Temporada a la que pertenece un día (`seasons` ordenadas por inicio).
+ * Antes de la primera cuenta como la primera, igual que `season_for` en SQL.
+ */
+export function getSeasonForDay(seasons: Season[], day: string): Season | undefined {
+  const started = seasons.filter((s) => s.startsOn <= day);
+  return started.length > 0 ? started[started.length - 1] : seasons[0];
 }
 
 export interface GoatRules {
@@ -82,7 +106,6 @@ export interface GoatRules {
 export interface AppSettings {
   appName: string;
   groupName: string;
-  activeSeasonId: string;
   rules: GoatRules;
 }
 

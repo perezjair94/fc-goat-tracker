@@ -16,26 +16,43 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SeasonSelect, formatSeasonRange, isSeasonOver, useSeasonFilter } from "@/components/season-select";
 import { useFcStore } from "@/hooks/use-fc-store";
-import { getRanking } from "@/lib/services/fc-service";
+import { getRanking, getSeason } from "@/lib/services/fc-service";
 import { MATCH_MODES, MATCH_MODE_LABELS, formatWinRate, isMatchMode, type MatchMode } from "@/types";
 import { cn } from "@/lib/utils";
 
 export default function RankingPage() {
   const [mode, setMode] = useState<MatchMode | "all">("all");
+  const [season, setSeason] = useSeasonFilter();
   const { data: ranking, ready } = useFcStore(() =>
     mode === "all"
-      ? getRanking()
+      ? getRanking({ season })
       : // En el ranking de un tipo solo aparecen quienes han jugado ese tipo.
-        getRanking(mode).filter((entry) => entry.played > 0)
+        getRanking({ mode, season }).filter((entry) => entry.played > 0)
   );
+  const { data: seasonInfo } = useFcStore(() => (season === "all" ? undefined : getSeason(season)));
+  const champion = seasonInfo && isSeasonOver(seasonInfo) && ranking?.[0]?.played ? ranking[0] : undefined;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Ranking GOAT"
-        description="Calculado en vivo a partir del historial de partidos: puntos, win rate y desempate por diferencia de goles. Elige un tipo de partido para ver su ranking por separado."
+        description="Calculado en vivo a partir del historial de partidos: puntos, win rate y desempate por diferencia de goles. Cada temporada arranca de cero; elige una o el histórico, y un tipo de partido para verlo por separado."
+        actions={<SeasonSelect value={season} onChange={setSeason} />}
       />
+
+      {seasonInfo ? (
+        <p className="-mt-3 text-xs text-muted-foreground">
+          {seasonInfo.name} · {formatSeasonRange(seasonInfo)}
+          {champion ? (
+            <>
+              {" · "}
+              <span className="font-semibold text-goat-lime">Campeón: {champion.player.name}</span>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       <Tabs
         value={mode}
@@ -150,8 +167,8 @@ export default function RankingPage() {
           title="Todavía no hay ranking"
           description={
             mode === "all"
-              ? "Registra el primer partido para que el ranking se calcule automáticamente."
-              : `Todavía no hay partidos de ${MATCH_MODE_LABELS[mode]}. Registra uno para abrir este ranking.`
+              ? "Registra el primer partido de la temporada para que el ranking se calcule automáticamente."
+              : `Todavía no hay partidos de ${MATCH_MODE_LABELS[mode]} en esta temporada. Registra uno para abrir este ranking.`
           }
           actionLabel="Registrar partido"
           actionHref="/matches/new"

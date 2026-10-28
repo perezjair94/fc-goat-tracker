@@ -8,7 +8,7 @@ import { StatCard } from "@/components/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFcStore } from "@/hooks/use-fc-store";
 import { getMatchesForSession, getPlayers, getRules, getSession } from "@/lib/services/fc-service";
-import { formatDate } from "@/lib/format";
+import { formatDay } from "@/lib/format";
 import { getWinnerId } from "@/types";
 
 export function SessionDetailView({ id }: { id: string }) {
@@ -67,7 +67,7 @@ export function SessionDetailView({ id }: { id: string }) {
         </div>
         <div>
           <h1 className="text-2xl font-black tracking-tight">{session.name}</h1>
-          <p className="text-sm text-muted-foreground">{formatDate(session.date)}</p>
+          <p className="text-sm text-muted-foreground">{formatDay(session.date)}</p>
         </div>
       </div>
 

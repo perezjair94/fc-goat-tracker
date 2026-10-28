@@ -2,8 +2,10 @@ import { DEFAULT_SETTINGS } from "@/lib/data/store";
 import {
   createOwnPlayerAction,
   createMatchAction,
+  createSeasonAction,
   createSessionAction,
   deleteMatchAction,
+  deleteSeasonAction,
   saveSettingsAction,
   signUpAction,
   updateMatchAction,
@@ -18,7 +20,7 @@ import {
   SETTINGS_COLUMNS,
   toMatch,
   toPlayer,
-  toSeason,
+  toSeasons,
   toSession,
   toSettings,
   type MatchRow,
@@ -29,8 +31,10 @@ import {
 } from "@/lib/supabase/rows";
 import {
   getHeadToHead as computeHeadToHead,
+  getSeasonForDay,
   isMatchMode,
   getRanking as computeRanking,
+  toSeasonDay,
   type AppSettings,
   type GoatRules,
   type HeadToHead,
@@ -55,6 +59,10 @@ import {
  * se permite; `canEditMatch` solo sirve para mostrar u ocultar botones.
  *
  * Cada cuenta tiene exactamente un jugador, que se crea al registrarse.
+ *
+ * Temporadas: la base asigna la temporada de cada partido y sesión por
+ * fecha. Las lecturas filtran con `SeasonFilter` (un número de temporada o
+ * "all" para el histórico).
  *
  * Sesión: el login corre en el navegador (cookies de `@supabase/ssr`) y el
  * proxy la refresca en cada petición.
@@ -137,7 +145,7 @@ async function fetchState(): Promise<PersistedState> {
     supabase.from("players").select(PLAYER_COLUMNS).order("created_at").returns<PlayerRow[]>(),
     supabase.from("matches").select(MATCH_COLUMNS).returns<MatchRow[]>(),
     supabase.from("sessions").select(SESSION_COLUMNS).returns<SessionRow[]>(),
-    supabase.from("seasons").select(SEASON_COLUMNS).order("year").returns<SeasonRow[]>(),
+    supabase.from("seasons").select(SEASON_COLUMNS).returns<SeasonRow[]>(),
     supabase.from("app_settings").select(SETTINGS_COLUMNS).maybeSingle<SettingsRow>(),
   ]);
 
@@ -158,7 +166,7 @@ async function fetchState(): Promise<PersistedState> {
     players: (players.data ?? []).map(toPlayer),
     matches: matchList,
     sessions: (sessions.data ?? []).map((row) => toSession(row, matchIdsBySession.get(row.id) ?? [])),
-    seasons: (seasons.data ?? []).map(toSeason),
+    seasons: toSeasons(seasons.data ?? []),
     settings: settings.data ? toSettings(settings.data) : DEFAULT_SETTINGS,
   };
 }
@@ -211,16 +219,25 @@ export function getPlayer(id: string): Player | undefined {
 // Matches
 // ---------------------------------------------------------------------------
 
-export function getMatches(): Match[] {
-  return [...readState().matches].sort((a, b) => byCreatedAtAsc(b, a));
+/** Número de temporada, o "all" para todas. */
+export type SeasonFilter = number | "all";
+
+function inSeason(item: { season: number }, season: SeasonFilter): boolean {
+  return season === "all" || item.season === season;
+}
+
+export function getMatches(season: SeasonFilter = "all"): Match[] {
+  return readState()
+    .matches.filter((m) => inSeason(m, season))
+    .sort((a, b) => byCreatedAtAsc(b, a));
 }
 
 export function getMatch(id: string): Match | undefined {
   return readState().matches.find((m) => m.id === id);
 }
 
-export function getMatchesForPlayer(playerId: string): Match[] {
-  return getMatches().filter((m) => m.player1Id === playerId || m.player2Id === playerId);
+export function getMatchesForPlayer(playerId: string, season: SeasonFilter = "all"): Match[] {
+  return getMatches(season).filter((m) => m.player1Id === playerId || m.player2Id === playerId);
 }
 
 export function getMatchesForSession(sessionId: string): Match[] {
@@ -233,7 +250,6 @@ export interface CreateMatchInput {
   score1: number;
   score2: number;
   mode: MatchMode;
-  season: number;
   sessionId?: string;
   notes?: string;
   evidenceUrl?: string;
@@ -288,7 +304,6 @@ export function getSession(id: string): Session | undefined {
 export interface CreateSessionInput {
   name: string;
   date: string;
-  season: number;
 }
 
 export async function createSession(input: CreateSessionInput): Promise<Session> {
@@ -299,12 +314,40 @@ export async function createSession(input: CreateSessionInput): Promise<Session>
 // Seasons
 // ---------------------------------------------------------------------------
 
+/** Ordenadas por inicio, de la primera a la última. */
 export function getSeasons(): Season[] {
   return readState().seasons;
 }
 
-export function getActiveSeason(): Season | undefined {
-  return getSeasons().find((s) => s.active);
+export function getSeason(number: number): Season | undefined {
+  return getSeasons().find((s) => s.number === number);
+}
+
+/** La última temporada que ya empezó (hoy en Bogotá). */
+export function getCurrentSeason(): Season | undefined {
+  return getSeasonForDay(getSeasons(), toSeasonDay());
+}
+
+export interface CreateSeasonInput {
+  name: string;
+  startsOn: string;
+}
+
+/** Programa la siguiente temporada. Tiene que empezar después de hoy y de la última. */
+export async function createSeason(input: CreateSeasonInput): Promise<Season> {
+  const last = getSeasons().at(-1);
+  if (input.startsOn <= toSeasonDay()) {
+    throw new Error("La temporada debe empezar después de hoy.");
+  }
+  if (last && input.startsOn <= last.startsOn) {
+    throw new Error(`La temporada debe empezar después del inicio de ${last.name}.`);
+  }
+  return run(createSeasonAction(input));
+}
+
+/** Cancela una temporada programada (solo la última y si no ha empezado). */
+export async function deleteSeason(id: string): Promise<void> {
+  await run(deleteSeasonAction(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -430,11 +473,24 @@ export async function signOut(): Promise<void> {
 // Datos derivados
 // ---------------------------------------------------------------------------
 
-/** Ranking GOAT general, o solo con los partidos de un tipo si se pasa `mode`. */
-export function getRanking(mode?: MatchMode): RankingEntry[] {
+export interface RankingFilter {
+  /** Solo partidos de este tipo. */
+  mode?: MatchMode;
+  /** Por defecto, todas las temporadas. */
+  season?: SeasonFilter;
+}
+
+/** Ranking GOAT de una temporada (o histórico), opcionalmente de un solo tipo. */
+export function getRanking({ mode, season = "all" }: RankingFilter = {}): RankingEntry[] {
   const { players, matches: all, settings } = readState();
-  const matches = mode ? all.filter((m) => m.mode === mode) : all;
+  const matches = all.filter((m) => inSeason(m, season) && (!mode || m.mode === mode));
   return computeRanking(players, matches, settings.rules);
+}
+
+/** Primero del ranking de una temporada, o undefined si nadie jugó. */
+export function getSeasonChampion(season: number): RankingEntry | undefined {
+  const leader = getRanking({ season })[0];
+  return leader && leader.played > 0 ? leader : undefined;
 }
 
 export function getHeadToHead(playerAId: string, playerBId: string): HeadToHead {

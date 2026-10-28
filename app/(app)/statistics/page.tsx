@@ -5,21 +5,25 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { EmptyState } from "@/components/empty-state";
+import { SeasonSelect, useSeasonFilter } from "@/components/season-select";
 import { useFcStore } from "@/hooks/use-fc-store";
 import { getMatches, getRanking, getRules } from "@/lib/services/fc-service";
 
 export default function StatisticsPage() {
-  const { data: matches, ready } = useFcStore(getMatches);
-  const { data: ranking } = useFcStore(getRanking);
+  const [season, setSeason] = useSeasonFilter();
+  const { data: matches, ready } = useFcStore(() => getMatches(season));
+  const { data: ranking } = useFcStore(() => getRanking({ season }));
   const rules = getRules();
 
   if (!ready) return null;
 
+  const seasonSelect = <SeasonSelect value={season} onChange={setSeason} />;
+
   if (!matches || matches.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="Estadísticas" description="Métricas agregadas del grupo." />
-        <EmptyState icon={BarChart3} title="Sin datos todavía" description="Registra partidos para ver estadísticas agregadas." actionLabel="Registrar partido" actionHref="/matches/new" />
+        <PageHeader title="Estadísticas" description="Métricas agregadas del grupo." actions={seasonSelect} />
+        <EmptyState icon={BarChart3} title="Sin datos todavía" description="Registra partidos de esta temporada para ver estadísticas agregadas." actionLabel="Registrar partido" actionHref="/matches/new" />
       </div>
     );
   }
@@ -36,7 +40,11 @@ export default function StatisticsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Estadísticas" description="Métricas agregadas de todos los partidos registrados." />
+      <PageHeader
+        title="Estadísticas"
+        description={season === "all" ? "Métricas agregadas de todos los partidos registrados." : "Métricas agregadas de los partidos de la temporada."}
+        actions={seasonSelect}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Partidos totales" value={matches.length} icon={Swords} />

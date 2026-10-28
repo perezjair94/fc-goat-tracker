@@ -27,3 +27,16 @@ export function formatRelative(iso: string): string {
   if (diffD < 30) return `hace ${diffD} d`;
   return formatDate(iso);
 }
+
+/**
+ * Formatea un día `YYYY-MM-DD` (fecha sin hora). Se interpreta en UTC para
+ * que no se corra un día al pasarlo a la zona horaria local.
+ */
+export function formatDay(day: string): string {
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${day}T00:00:00Z`));
+}

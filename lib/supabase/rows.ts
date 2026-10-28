@@ -18,9 +18,9 @@ export interface PlayerRow {
 
 export interface SeasonRow {
   id: string;
-  year: number;
+  number: number;
   name: string;
-  active: boolean;
+  starts_on: string;
 }
 
 export interface SessionRow {
@@ -50,7 +50,6 @@ export interface MatchRow {
 export interface SettingsRow {
   app_name: string;
   group_name: string;
-  active_season_id: string;
   win_points: number;
   draw_points: number;
   loss_points: number;
@@ -59,12 +58,12 @@ export interface SettingsRow {
 }
 
 export const PLAYER_COLUMNS = "id, name, handle, color, initials, active, created_at";
-export const SEASON_COLUMNS = "id, year, name, active";
+export const SEASON_COLUMNS = "id, number, name, starts_on";
 export const SESSION_COLUMNS = "id, name, date, season, created_by, created_at";
 export const MATCH_COLUMNS =
   "id, player1_id, player2_id, score1, score2, mode, season, session_id, notes, evidence_url, created_by, created_at";
 export const SETTINGS_COLUMNS =
-  "app_name, group_name, active_season_id, win_points, draw_points, loss_points, ko_goal_difference, ko_bonus_points";
+  "app_name, group_name, win_points, draw_points, loss_points, ko_goal_difference, ko_bonus_points";
 
 export function toPlayer(row: PlayerRow): Player {
   return {
@@ -78,8 +77,28 @@ export function toPlayer(row: PlayerRow): Player {
   };
 }
 
-export function toSeason(row: SeasonRow): Season {
-  return { id: row.id, year: row.year, name: row.name, active: row.active };
+/**
+ * `endsOn` no se guarda: es el día antes de que empiece la siguiente.
+ * Devuelve las temporadas ordenadas por inicio.
+ */
+export function toSeasons(rows: SeasonRow[]): Season[] {
+  const sorted = [...rows].sort((a, b) => a.starts_on.localeCompare(b.starts_on));
+  return sorted.map((row, index) => {
+    const next = sorted[index + 1];
+    return {
+      id: row.id,
+      number: row.number,
+      name: row.name,
+      startsOn: row.starts_on,
+      endsOn: next ? previousDay(next.starts_on) : undefined,
+    };
+  });
+}
+
+function previousDay(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
 }
 
 /** `matchIds` no se guarda: se deriva de `matches.session_id`. */
@@ -116,7 +135,6 @@ export function toSettings(row: SettingsRow): AppSettings {
   return {
     appName: row.app_name,
     groupName: row.group_name,
-    activeSeasonId: row.active_season_id,
     rules: {
       winPoints: row.win_points,
       drawPoints: row.draw_points,
@@ -131,7 +149,6 @@ export function fromSettings(settings: AppSettings): SettingsRow {
   return {
     app_name: settings.appName,
     group_name: settings.groupName,
-    active_season_id: settings.activeSeasonId,
     win_points: settings.rules.winPoints,
     draw_points: settings.rules.drawPoints,
     loss_points: settings.rules.lossPoints,

@@ -3,7 +3,7 @@ import { Flame, Trophy } from "lucide-react";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { formatWinRate, type RankingEntry } from "@/types";
 
-export function GoatHero({ entry }: { entry: RankingEntry }) {
+export function GoatHero({ entry, label = "GOAT actual" }: { entry: RankingEntry; label?: string }) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-goat-lime/20 bg-goat-surface-hero p-6 sm:p-8">
       <div
@@ -16,7 +16,7 @@ export function GoatHero({ entry }: { entry: RankingEntry }) {
           <div>
             <div className="mb-1 flex items-center gap-1.5 text-goat-lime">
               <Trophy className="size-4" />
-              <span className="text-xs font-bold uppercase tracking-widest">GOAT actual</span>
+              <span className="text-xs font-bold uppercase tracking-widest">{label}</span>
             </div>
             <Link href={`/players/${entry.player.id}`} className="text-2xl font-black tracking-tight hover:underline sm:text-3xl">
               {entry.player.name}

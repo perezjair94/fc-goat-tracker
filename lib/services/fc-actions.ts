@@ -6,26 +6,37 @@ import { getServerClient } from "@/lib/supabase/server";
 import {
   MATCH_COLUMNS,
   PLAYER_COLUMNS,
+  SEASON_COLUMNS,
   SESSION_COLUMNS,
   SETTINGS_COLUMNS,
   fromSettings,
   toMatch,
   toPlayer,
+  toSeasons,
   toSession,
   toSettings,
   type MatchRow,
   type PlayerRow,
+  type SeasonRow,
   type SessionRow,
   type SettingsRow,
 } from "@/lib/supabase/rows";
-import { MATCH_MODES, getPlayerInitials, type AppSettings, type Match, type Player, type Session } from "@/types";
-import type { CreateMatchInput, CreateSessionInput } from "@/lib/services/fc-service";
+import {
+  MATCH_MODES,
+  getPlayerInitials,
+  type AppSettings,
+  type Match,
+  type Player,
+  type Season,
+  type Session,
+} from "@/types";
+import type { CreateMatchInput, CreateSeasonInput, CreateSessionInput } from "@/lib/services/fc-service";
 
 /**
  * Escrituras en Supabase. Corren en el servidor con la sesión del usuario
  * (cookies), así que RLS decide quién puede hacer qué; aquí solo se valida
  * la forma de los datos y se traducen los errores. `created_by` lo pone la
- * base con el jugador de la sesión.
+ * base con el jugador de la sesión, y `season` según la fecha.
  *
  * Devuelven `ActionResult` en vez de lanzar, porque en producción Next.js
  * oculta el mensaje de los errores lanzados en el servidor.
@@ -44,7 +55,6 @@ const matchFields = z.object({
   score1: score,
   score2: score,
   mode: z.enum(MATCH_MODES),
-  season: z.number().int().min(2000).max(2100),
   sessionId: id.optional(),
   notes: z.string().trim().max(1000).optional(),
   evidenceUrl: z.url().max(2048).optional(),
@@ -57,7 +67,11 @@ const createMatchSchema = matchFields.refine((m) => m.player1Id !== m.player2Id,
 const createSessionSchema = z.object({
   name: z.string().trim().min(1, "La sesión necesita un nombre.").max(120),
   date: z.iso.date(),
-  season: z.number().int().min(2000).max(2100),
+});
+
+const createSeasonSchema = z.object({
+  name: z.string().trim().min(1, "La temporada necesita un nombre.").max(60),
+  startsOn: z.iso.date("Elige la fecha de inicio."),
 });
 
 const nonNegativeInt = z.number().int().min(0).max(100);
@@ -65,7 +79,6 @@ const nonNegativeInt = z.number().int().min(0).max(100);
 const settingsSchema = z.object({
   appName: z.string().trim().min(1).max(80),
   groupName: z.string().trim().min(1).max(80),
-  activeSeasonId: id,
   rules: z.object({
     winPoints: nonNegativeInt,
     drawPoints: nonNegativeInt,
@@ -94,7 +107,12 @@ function fail<T>(error: unknown): ActionResult<T> {
   if (code === "23503") {
     return { ok: false, error: "Jugador, temporada o sesión inválidos (la sesión debe ser de la misma temporada)." };
   }
-  if (code === "23514") return { ok: false, error: "Los datos no cumplen las reglas del partido." };
+  if (code === "23514") {
+    // Las reglas de temporadas se validan en un trigger con mensaje propio.
+    const message = (error as { message?: string }).message;
+    if (message?.startsWith("La temporada")) return { ok: false, error: message };
+    return { ok: false, error: "Los datos no cumplen las reglas del partido." };
+  }
   if (code === "23505") return { ok: false, error: "Ya existe un registro con esos datos." };
   console.error("[fc-actions]", error);
   return { ok: false, error: "No se pudo guardar en la base de datos." };
@@ -111,7 +129,6 @@ function matchRowPatch(input: Partial<CreateMatchInput>) {
   if (input.score1 !== undefined) row.score1 = input.score1;
   if (input.score2 !== undefined) row.score2 = input.score2;
   if (input.mode !== undefined) row.mode = input.mode;
-  if (input.season !== undefined) row.season = input.season;
   if (input.sessionId !== undefined) row.session_id = input.sessionId;
   if (input.notes !== undefined) row.notes = input.notes;
   if (input.evidenceUrl !== undefined) row.evidence_url = input.evidenceUrl;
@@ -185,11 +202,53 @@ export async function createSessionAction(input: CreateSessionInput): Promise<Ac
     const supabase = await getServerClient();
     const { data, error } = await supabase
       .from("sessions")
-      .insert({ name: parsed.name, date: parsed.date, season: parsed.season })
+      .insert({ name: parsed.name, date: parsed.date })
       .select(SESSION_COLUMNS)
       .single<SessionRow>();
     if (error) throw error;
     return { ok: true, data: toSession(data, []) };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seasons
+// ---------------------------------------------------------------------------
+
+/**
+ * El número lo pone la base (el siguiente) y valida que la fecha sea futura.
+ * La nueva siempre es la última, así que no tiene `endsOn`.
+ */
+export async function createSeasonAction(input: CreateSeasonInput): Promise<ActionResult<Season>> {
+  try {
+    const parsed = createSeasonSchema.parse(input);
+    const supabase = await getServerClient();
+    const { data, error } = await supabase
+      .from("seasons")
+      .insert({ name: parsed.name, starts_on: parsed.startsOn })
+      .select(SEASON_COLUMNS)
+      .single<SeasonRow>();
+    if (error) throw error;
+    return { ok: true, data: toSeasons([data])[0] };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteSeasonAction(seasonId: string): Promise<ActionResult<null>> {
+  try {
+    const supabase = await getServerClient();
+    const { data, error } = await supabase
+      .from("seasons")
+      .delete()
+      .eq("id", id.parse(seasonId))
+      .select("id");
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      return { ok: false, error: "Solo se puede cancelar la última temporada y antes de que empiece." };
+    }
+    return { ok: true, data: null };
   } catch (error) {
     return fail(error);
   }

@@ -20,7 +20,6 @@ import { useFcStore } from "@/hooks/use-fc-store";
 import {
   createMatch,
   getActivePlayers,
-  getActiveSeason,
   getRules,
   getSessions,
 } from "@/lib/services/fc-service";
@@ -84,14 +83,13 @@ export function MatchForm({ defaultSessionId, redirectTo = "/history" }: MatchFo
 
     setSubmitting(true);
     try {
-      const season = getActiveSeason()?.year ?? new Date().getFullYear();
+      // La temporada la asigna la base según la sesión o la fecha.
       await createMatch({
         player1Id,
         player2Id,
         score1: s1,
         score2: s2,
         mode,
-        season,
         sessionId: sessionId === "none" ? undefined : sessionId,
         notes: notes.trim() || undefined,
       });

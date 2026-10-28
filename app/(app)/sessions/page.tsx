@@ -19,20 +19,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useFcStore } from "@/hooks/use-fc-store";
-import { createSession, getActiveSeason, getSessions } from "@/lib/services/fc-service";
+import { createSession, getSeasons, getSessions } from "@/lib/services/fc-service";
 import { useCurrentPlayer } from "@/hooks/use-current-player";
-import { formatDate } from "@/lib/format";
+import { formatDay } from "@/lib/format";
+import { toSeasonDay } from "@/types";
 
 export default function SessionsPage() {
   const { data: sessions, ready } = useFcStore(getSessions);
+  const { data: seasons } = useFcStore(getSeasons);
   const router = useRouter();
   const { account, currentPlayerId } = useCurrentPlayer();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Hoy en Bogotá: toISOString() daría el día siguiente por la noche.
+  const [date, setDate] = useState(() => toSeasonDay());
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => toSeasonDay(), []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -44,8 +47,8 @@ export default function SessionsPage() {
     }
     setCreating(true);
     try {
-      const season = getActiveSeason()?.year ?? new Date().getFullYear();
-      await createSession({ name: name.trim(), date, season });
+      // La temporada la asigna la base según la fecha.
+      await createSession({ name: name.trim(), date });
       toast.success("Sesión creada");
       setName("");
       setDate(today);
@@ -89,7 +92,10 @@ export default function SessionsPage() {
             >
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Layers3 className="size-4" />
-                <span className="text-xs">{formatDate(session.date)}</span>
+                <span className="text-xs">{formatDay(session.date)}</span>
+                <span className="ml-auto text-xs">
+                  {seasons?.find((s) => s.number === session.season)?.name}
+                </span>
               </div>
               <p className="font-semibold">{session.name}</p>
               <p className="text-xs text-muted-foreground">

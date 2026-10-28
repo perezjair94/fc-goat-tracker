@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { MatchCard } from "@/components/match-card";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SeasonSelect, useSeasonFilter } from "@/components/season-select";
 import {
   Select,
   SelectContent,
@@ -18,7 +19,8 @@ import { getMatches, getPlayers, getRules } from "@/lib/services/fc-service";
 import { MATCH_MODES, MATCH_MODE_LABELS, isMatchMode } from "@/types";
 
 export default function HistoryPage() {
-  const { data: matches, ready } = useFcStore(getMatches);
+  const [season, setSeason] = useSeasonFilter("all");
+  const { data: matches, ready } = useFcStore(() => getMatches(season));
   const { data: players } = useFcStore(getPlayers);
   const rules = getRules();
   const [playerFilter, setPlayerFilter] = useState("all");
@@ -42,6 +44,7 @@ export default function HistoryPage() {
         description="Todos los partidos registrados, del más reciente al más antiguo."
         actions={
           <div className="flex flex-wrap gap-2">
+            <SeasonSelect value={season} onChange={setSeason} className="w-44" />
             <Select value={modeFilter} onValueChange={(value) => setModeFilter(value ?? "all")}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Todos los tipos">
