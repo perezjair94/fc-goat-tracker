@@ -8,7 +8,7 @@ alter table public.seasons disable trigger seasons_prepare_new;
 
 insert into public.seasons (id, number, name, starts_on) values
   ('season-2026', 1, 'Temporada 1', '2026-09-24'),
-  ('season-2', 2, 'Temporada 2', '2026-10-26')
+  ('season-2', 2, 'Temporada 2', '2026-10-24')
 on conflict (id) do nothing;
 
 alter table public.seasons enable trigger seasons_prepare_new;
