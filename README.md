@@ -1,5 +1,7 @@
 # FC GOAT Tracker
 
+**Live demo:** https://fc-goat-tracker.vercel.app
+
 A full-stack web app to settle the eternal debate in a group of friends: **who is the GOAT at EA Sports FC?**
 Players log their matches, and the app derives rankings, stats and head-to-head records from the match history — no manually edited counters, the history is the single source of truth.
 
